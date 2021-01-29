@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package atbus.protocol;
+
+option optimize_for = SPEED;
+// option optimize_for = LITE_RUNTIME;
+// option optimize_for = CODE_SIZE;
+// --cpp_out=lite:,--cpp_out=
+option cc_enable_arenas = true;
+
+enum ATBUS_PROTOCOL_CONST {
+  option allow_alias             = true;
+  ATBUS_PROTOCOL_CONST_UNKNOWN   = 0;
+  ATBUS_PROTOCOL_VERSION         = 3;
+  ATBUS_PROTOCOL_MINIMAL_VERSION = 3; // minimal protocol version supported
+}
+
+enum ATBUS_PACKET_FLAG_TYPE {
+  ATBUS_PACKET_FLAG_NONE = 0; // default value
+
+  // Reset sequence.
+  // When endpoints are first created or receive a packet_data with acknowledge lower than the first message in queue
+  // We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_SEQUENCE
+  ATBUS_PACKET_FLAG_RESET_SEQUENCE = 1;
+}
+
+// any_value,array_value and key_value_list are just like in opentelemetry.
+// @see https://github.com/open-telemetry/opentelemetry-proto/blob/master/opentelemetry/proto/trace/v1/trace.proto
+// @see https://opentelemetry.io
+// @see https://opentracing.io/specification/
+//
+message any_value {
+  oneof value {
+    string         string_value = 1;
+    bool           bool_value   = 2;
+    int64          int_value    = 3;
+    double         double_value = 4;
+    array_value    array_value  = 5;
+    key_value_list kvlist_value = 6;
+  }
+}
+
+message array_value { repeated any_value values = 1; }
+
+message key_value_list { map<string, any_value> values = 1; }
+
+message command_options {
+  // allow extension
+  extensions 2000 to max;
+}
+
+message command_data {
+  int64                  sequence  = 1;
+  repeated bytes         arguments = 2;
+  command_options        options   = 3;
+  map<string, any_value> tags      = 4; // allow custom tags
+}
+
+message ping_data {
+  int64 sequence  = 1;
+  int64 timepoint = 2;
+}
+
+message packet_options {
+  // allow extension
+  extensions 2000 to max;
+}
+
+message packet_data {
+  int64                  packet_sequence    = 1;
+  int64                  packet_acknowledge = 2;
+  bytes                  content            = 3;
+  int32                  flags              = 4;
+  packet_options         options            = 5;
+  map<string, any_value> tags               = 6; // allow custom tags
+  int64                  packet_slice_start = 7; // only greater than 0 when packet is splited into multiple frame
+  int64                  packet_slice_count = 8; // only greater than 0 when packet is splited into multiple frame
+  int64                  packet_length      = 9; // only greater than 0 when packet is splited into multiple frame
+}
+
+message msg_head {
+  int32 version     = 1;
+  bytes source      = 2;
+  bytes destination = 3;
+}
+
+message msg {
+  msg_head head = 1;
+  oneof    msg_body {
+    ping_data    node_ping = 11;
+    ping_data    node_pong = 12;
+    command_data command   = 13;
+    packet_data  forward   = 14;
+  }
+}

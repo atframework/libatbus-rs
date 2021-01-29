@@ -1,0 +1,22 @@
+[package]
+name = "libatbus-protocol"
+version = "0.1.0"
+authors = ["owent <admin@owent.net>"]
+license = "MIT OR Apache-2.0"
+description = "Protocols of libatbus-rs"
+homepage = "https://github.com/atframework"
+repository = "https://github.com/atframework/libatbus-rs"
+documentation = "https://github.com/atframework"
+keywords = ["libatbus", "network"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+protobuf = { version = "2", features = ["with-bytes"] }
+
+[build-dependencies]
+log         = "0.*"
+env_logger  = "0.*"
+protoc-rust = { version = "2" }
+protoc-bin-vendored = { version = "2" }

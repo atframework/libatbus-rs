@@ -1,0 +1,21 @@
+---
+Language: Proto
+AccessModifierOffset: -2
+AlignEscapedNewlinesLeft: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignTrailingComments: true
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortIfStatementsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: true
+ColumnLimit: 256
+CommentPragmas: ""
+IndentWidth: 2
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: All
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
+TabWidth: 2
+UseTab: Never
+---
+
