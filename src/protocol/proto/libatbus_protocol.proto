@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "libatbus_options.proto";
+
 package atbus.protocol;
 
 option optimize_for = SPEED;
@@ -22,31 +24,10 @@ enum ATBUS_PACKET_FLAG_TYPE {
   // When endpoints are first created or receive a packet_data with acknowledge lower than the first message in queue
   // We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_SEQUENCE
   ATBUS_PACKET_FLAG_RESET_SEQUENCE = 1;
-}
-
-// any_value,array_value and key_value_list are just like in opentelemetry.
-// @see https://github.com/open-telemetry/opentelemetry-proto/blob/master/opentelemetry/proto/trace/v1/trace.proto
-// @see https://opentelemetry.io
-// @see https://opentracing.io/specification/
-//
-message any_value {
-  oneof value {
-    string         string_value = 1;
-    bool           bool_value   = 2;
-    int64          int_value    = 3;
-    double         double_value = 4;
-    array_value    array_value  = 5;
-    key_value_list kvlist_value = 6;
-  }
-}
-
-message array_value { repeated any_value values = 1; }
-
-message key_value_list { map<string, any_value> values = 1; }
-
-message command_options {
-  // allow extension
-  extensions 2000 to max;
+  // Router unreachable.
+  // It may be send by proxy and tell the caller, we can not find next endpoint to send a packet and will drop it
+  // When ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE is set, packet_acknowledge will be the last packet received and lost
+  ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE = 2;
 }
 
 message command_data {
@@ -59,11 +40,6 @@ message command_data {
 message ping_data {
   int64 sequence  = 1;
   int64 timepoint = 2;
-}
-
-message packet_options {
-  // allow extension
-  extensions 2000 to max;
 }
 
 message packet_data {

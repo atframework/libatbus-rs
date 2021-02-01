@@ -1,0 +1,40 @@
+syntax = "proto2";
+
+package atbus.protocol;
+
+option optimize_for = SPEED;
+// option optimize_for = LITE_RUNTIME;
+// option optimize_for = CODE_SIZE;
+// --cpp_out=lite:,--cpp_out=
+option cc_enable_arenas = true;
+
+
+// any_value,array_value and key_value_list are just like in opentelemetry.
+// @see https://github.com/open-telemetry/opentelemetry-proto/blob/master/opentelemetry/proto/trace/v1/trace.proto
+// @see https://opentelemetry.io
+// @see https://opentracing.io/specification/
+//
+message any_value {
+  oneof value {
+    string         string_value = 1;
+    bool           bool_value   = 2;
+    int64          int_value    = 3;
+    double         double_value = 4;
+    array_value    array_value  = 5;
+    key_value_list kvlist_value = 6;
+  }
+}
+
+message array_value { repeated any_value values = 1; }
+
+message key_value_list { map<string, any_value> values = 1; }
+
+message command_options {
+  // allow extension
+  extensions 2000 to max;
+}
+
+message packet_options {
+  // allow extension
+  extensions 2000 to max;
+}

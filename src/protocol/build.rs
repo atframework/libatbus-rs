@@ -1,21 +1,38 @@
-  
+use std::fs;
+
 extern crate env_logger;
 extern crate log;
 
+extern crate protoc_bin_vendored;
 extern crate protoc_rust;
-
-use protoc_rust::Customize;
 
 fn codegen() -> protoc_rust::Codegen {
     let mut codegen = protoc_rust::Codegen::new();
-    codegen.out_dir("src/proto")
-        .inputs(&["proto/libatbus_protocol.proto"])
-        .include("proto")
-        .run()
+    codegen
+        .protoc_path(protoc_bin_vendored::protoc_bin_path().unwrap())
+        .out_dir("src/proto")
+        .inputs(&[
+            "proto/libatbus_options.proto",
+            "proto/libatbus_protocol.proto",
+        ])
+        .include("proto");
+
+    codegen
 }
 
 fn main() {
     env_logger::init();
 
-    codegen().expect("protoc");
+    codegen().run().expect("protoc");
+    fs::write(
+        "src/proto/mod.rs",
+        "
+mod libatbus_options;
+mod libatbus_protocol;
+",
+    )
+    .unwrap();
+
+    println!("cargo:rerun-if-changed=proto/libatbus_options.proto");
+    println!("cargo:rerun-if-changed=proto/libatbus_protocol.proto");
 }
