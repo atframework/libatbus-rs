@@ -1,5 +1,6 @@
 //! libatbus-protocol error type
 
+use protobuf::error::ProtobufError;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -17,6 +18,12 @@ pub enum ProtocolError {
     BufferNotEnough,
     /// Need more data to decode packet
     TruncatedPacket,
+    /// Need pick packet before write more data
+    HasPendingPacket,
+    /// Decode failed
+    DecodeFailed(ProtobufError),
+    /// Encode failed
+    EncodeFailed(ProtobufError),
 }
 
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
@@ -34,6 +41,15 @@ impl fmt::Display for ProtocolError {
             ProtocolError::TruncatedPacket => {
                 write!(f, "truncated packet, maybe need more data o decode it")
             }
+            ProtocolError::HasPendingPacket => {
+                write!(f, "need pick packet before put more data")
+            }
+            &ProtocolError::DecodeFailed(ref e) => {
+                write!(f, "decode failed: {}", e)
+            }
+            &ProtocolError::EncodeFailed(ref e) => {
+                write!(f, "encode failed: {}", e)
+            }
         }
     }
 }
@@ -49,6 +65,9 @@ impl Error for ProtocolError {
             &ProtocolError::IncorrectVarint => "incorrect varint",
             &ProtocolError::BufferNotEnough => "buffer not enough",
             &ProtocolError::TruncatedPacket => "truncated packet, maybe need more data o decode it",
+            &ProtocolError::HasPendingPacket => "need pick packet before put more data",
+            &ProtocolError::DecodeFailed(ref e) => &e.description(),
+            &ProtocolError::EncodeFailed(ref e) => &e.description(),
         }
     }
 

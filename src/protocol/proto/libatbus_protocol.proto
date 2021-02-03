@@ -13,6 +13,7 @@ option cc_enable_arenas = true;
 enum ATBUS_PROTOCOL_CONST {
   option allow_alias             = true;
   ATBUS_PROTOCOL_CONST_UNKNOWN   = 0;
+  ATBUS_PROTOCOL_MAGIC_NUMBER    = 16777619; // 0x1000193
   ATBUS_PROTOCOL_VERSION         = 3;
   ATBUS_PROTOCOL_MINIMAL_VERSION = 3; // minimal protocol version supported
 }
@@ -34,7 +35,7 @@ message command_data {
   int64                  sequence  = 1;
   repeated bytes         arguments = 2;
   command_options        options   = 3;
-  map<string, any_value> tags      = 4; // allow custom tags
+  map<string, any_value> labels    = 4; // allow custom labels
 }
 
 message ping_data {
@@ -43,29 +44,29 @@ message ping_data {
 }
 
 message packet_data {
-  int64                  packet_sequence    = 1;
-  int64                  packet_acknowledge = 2;
-  bytes                  content            = 3;
-  int32                  flags              = 4;
-  packet_options         options            = 5;
-  map<string, any_value> tags               = 6; // allow custom tags
-  int64                  packet_slice_start = 7; // only greater than 0 when packet is splited into multiple frame
-  int64                  packet_slice_count = 8; // only greater than 0 when packet is splited into multiple frame
-  int64                  packet_length      = 9; // only greater than 0 when packet is splited into multiple frame
+  int64                  packet_sequence      = 1;
+  int64                  packet_acknowledge   = 2;
+  bytes                  content              = 3;
+  int32                  flags                = 4;
+  packet_options         options              = 5;
+  map<string, any_value> labels               = 6; // allow custom labels
+  int64                  content_slice_index  = 7; // only greater than 0 when packet is splited into multiple frame
+  int64                  content_slice_count  = 8; // only greater than 0 when packet is splited into multiple frame
+  int64                  content_slice_length = 9; // only greater than 0 when packet is splited into multiple frame
 }
 
-message msg_head {
+message message_head {
   int32 version     = 1;
   bytes source      = 2;
   bytes destination = 3;
 }
 
-message msg {
-  msg_head head = 1;
-  oneof    msg_body {
+message message {
+  message_head head = 1;
+  oneof        body {
     ping_data    node_ping = 11;
     ping_data    node_pong = 12;
     command_data command   = 13;
-    packet_data  forward   = 14;
+    packet_data  packet    = 14;
   }
 }

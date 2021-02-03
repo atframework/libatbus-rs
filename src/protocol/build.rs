@@ -27,8 +27,8 @@ fn main() {
     fs::write(
         "src/proto/mod.rs",
         "
-mod libatbus_options;
-mod libatbus_protocol;
+pub mod libatbus_options;
+pub mod libatbus_protocol;
 ",
     )
     .unwrap();

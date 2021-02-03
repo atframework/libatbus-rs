@@ -29,7 +29,7 @@ pub struct command_data {
     pub sequence: i64,
     pub arguments: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
     pub options: ::protobuf::SingularPtrField<super::libatbus_options::command_options>,
-    pub tags: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
+    pub labels: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -119,29 +119,29 @@ impl command_data {
         self.options.take().unwrap_or_else(|| super::libatbus_options::command_options::new())
     }
 
-    // repeated .atbus.protocol.command_data.TagsEntry tags = 4;
+    // repeated .atbus.protocol.command_data.LabelsEntry labels = 4;
 
 
-    pub fn get_tags(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        &self.tags
+    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        &self.labels
     }
-    pub fn clear_tags(&mut self) {
-        self.tags.clear();
+    pub fn clear_labels(&mut self) {
+        self.labels.clear();
     }
 
     // Param is passed by value, moved
-    pub fn set_tags(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
-        self.tags = v;
+    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
+        self.labels = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_tags(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        &mut self.tags
+    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        &mut self.labels
     }
 
     // Take field
-    pub fn take_tags(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        ::std::mem::replace(&mut self.tags, ::std::collections::HashMap::new())
+    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        ::std::mem::replace(&mut self.labels, ::std::collections::HashMap::new())
     }
 }
 
@@ -173,7 +173,7 @@ impl ::protobuf::Message for command_data {
                     ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.options)?;
                 },
                 4 => {
-                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.tags)?;
+                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.labels)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -197,7 +197,7 @@ impl ::protobuf::Message for command_data {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.tags);
+        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.labels);
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
@@ -215,7 +215,7 @@ impl ::protobuf::Message for command_data {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.tags, os)?;
+        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.labels, os)?;
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -270,9 +270,9 @@ impl ::protobuf::Message for command_data {
                 |m: &mut command_data| { &mut m.options },
             ));
             fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(
-                "tags",
-                |m: &command_data| { &m.tags },
-                |m: &mut command_data| { &mut m.tags },
+                "labels",
+                |m: &command_data| { &m.labels },
+                |m: &mut command_data| { &mut m.labels },
             ));
             ::protobuf::reflect::MessageDescriptor::new_pb_name::<command_data>(
                 "command_data",
@@ -293,7 +293,7 @@ impl ::protobuf::Clear for command_data {
         self.sequence = 0;
         self.arguments.clear();
         self.options.clear();
-        self.tags.clear();
+        self.labels.clear();
         self.unknown_fields.clear();
     }
 }
@@ -505,10 +505,10 @@ pub struct packet_data {
     pub content: ::std::vec::Vec<u8>,
     pub flags: i32,
     pub options: ::protobuf::SingularPtrField<super::libatbus_options::packet_options>,
-    pub tags: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
-    pub packet_slice_start: i64,
-    pub packet_slice_count: i64,
-    pub packet_length: i64,
+    pub labels: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
+    pub content_slice_index: i64,
+    pub content_slice_count: i64,
+    pub content_slice_length: i64,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -629,74 +629,74 @@ impl packet_data {
         self.options.take().unwrap_or_else(|| super::libatbus_options::packet_options::new())
     }
 
-    // repeated .atbus.protocol.packet_data.TagsEntry tags = 6;
+    // repeated .atbus.protocol.packet_data.LabelsEntry labels = 6;
 
 
-    pub fn get_tags(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        &self.tags
+    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        &self.labels
     }
-    pub fn clear_tags(&mut self) {
-        self.tags.clear();
+    pub fn clear_labels(&mut self) {
+        self.labels.clear();
     }
 
     // Param is passed by value, moved
-    pub fn set_tags(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
-        self.tags = v;
+    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
+        self.labels = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_tags(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        &mut self.tags
+    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        &mut self.labels
     }
 
     // Take field
-    pub fn take_tags(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
-        ::std::mem::replace(&mut self.tags, ::std::collections::HashMap::new())
+    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+        ::std::mem::replace(&mut self.labels, ::std::collections::HashMap::new())
     }
 
-    // int64 packet_slice_start = 7;
+    // int64 content_slice_index = 7;
 
 
-    pub fn get_packet_slice_start(&self) -> i64 {
-        self.packet_slice_start
+    pub fn get_content_slice_index(&self) -> i64 {
+        self.content_slice_index
     }
-    pub fn clear_packet_slice_start(&mut self) {
-        self.packet_slice_start = 0;
-    }
-
-    // Param is passed by value, moved
-    pub fn set_packet_slice_start(&mut self, v: i64) {
-        self.packet_slice_start = v;
-    }
-
-    // int64 packet_slice_count = 8;
-
-
-    pub fn get_packet_slice_count(&self) -> i64 {
-        self.packet_slice_count
-    }
-    pub fn clear_packet_slice_count(&mut self) {
-        self.packet_slice_count = 0;
+    pub fn clear_content_slice_index(&mut self) {
+        self.content_slice_index = 0;
     }
 
     // Param is passed by value, moved
-    pub fn set_packet_slice_count(&mut self, v: i64) {
-        self.packet_slice_count = v;
+    pub fn set_content_slice_index(&mut self, v: i64) {
+        self.content_slice_index = v;
     }
 
-    // int64 packet_length = 9;
+    // int64 content_slice_count = 8;
 
 
-    pub fn get_packet_length(&self) -> i64 {
-        self.packet_length
+    pub fn get_content_slice_count(&self) -> i64 {
+        self.content_slice_count
     }
-    pub fn clear_packet_length(&mut self) {
-        self.packet_length = 0;
+    pub fn clear_content_slice_count(&mut self) {
+        self.content_slice_count = 0;
     }
 
     // Param is passed by value, moved
-    pub fn set_packet_length(&mut self, v: i64) {
-        self.packet_length = v;
+    pub fn set_content_slice_count(&mut self, v: i64) {
+        self.content_slice_count = v;
+    }
+
+    // int64 content_slice_length = 9;
+
+
+    pub fn get_content_slice_length(&self) -> i64 {
+        self.content_slice_length
+    }
+    pub fn clear_content_slice_length(&mut self) {
+        self.content_slice_length = 0;
+    }
+
+    // Param is passed by value, moved
+    pub fn set_content_slice_length(&mut self, v: i64) {
+        self.content_slice_length = v;
     }
 }
 
@@ -742,28 +742,28 @@ impl ::protobuf::Message for packet_data {
                     ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.options)?;
                 },
                 6 => {
-                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.tags)?;
+                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.labels)?;
                 },
                 7 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
                     let tmp = is.read_int64()?;
-                    self.packet_slice_start = tmp;
+                    self.content_slice_index = tmp;
                 },
                 8 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
                     let tmp = is.read_int64()?;
-                    self.packet_slice_count = tmp;
+                    self.content_slice_count = tmp;
                 },
                 9 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
                     let tmp = is.read_int64()?;
-                    self.packet_length = tmp;
+                    self.content_slice_length = tmp;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -793,15 +793,15 @@ impl ::protobuf::Message for packet_data {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.tags);
-        if self.packet_slice_start != 0 {
-            my_size += ::protobuf::rt::value_size(7, self.packet_slice_start, ::protobuf::wire_format::WireTypeVarint);
+        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.labels);
+        if self.content_slice_index != 0 {
+            my_size += ::protobuf::rt::value_size(7, self.content_slice_index, ::protobuf::wire_format::WireTypeVarint);
         }
-        if self.packet_slice_count != 0 {
-            my_size += ::protobuf::rt::value_size(8, self.packet_slice_count, ::protobuf::wire_format::WireTypeVarint);
+        if self.content_slice_count != 0 {
+            my_size += ::protobuf::rt::value_size(8, self.content_slice_count, ::protobuf::wire_format::WireTypeVarint);
         }
-        if self.packet_length != 0 {
-            my_size += ::protobuf::rt::value_size(9, self.packet_length, ::protobuf::wire_format::WireTypeVarint);
+        if self.content_slice_length != 0 {
+            my_size += ::protobuf::rt::value_size(9, self.content_slice_length, ::protobuf::wire_format::WireTypeVarint);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -826,15 +826,15 @@ impl ::protobuf::Message for packet_data {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.tags, os)?;
-        if self.packet_slice_start != 0 {
-            os.write_int64(7, self.packet_slice_start)?;
+        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.labels, os)?;
+        if self.content_slice_index != 0 {
+            os.write_int64(7, self.content_slice_index)?;
         }
-        if self.packet_slice_count != 0 {
-            os.write_int64(8, self.packet_slice_count)?;
+        if self.content_slice_count != 0 {
+            os.write_int64(8, self.content_slice_count)?;
         }
-        if self.packet_length != 0 {
-            os.write_int64(9, self.packet_length)?;
+        if self.content_slice_length != 0 {
+            os.write_int64(9, self.content_slice_length)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -900,24 +900,24 @@ impl ::protobuf::Message for packet_data {
                 |m: &mut packet_data| { &mut m.options },
             ));
             fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(
-                "tags",
-                |m: &packet_data| { &m.tags },
-                |m: &mut packet_data| { &mut m.tags },
+                "labels",
+                |m: &packet_data| { &m.labels },
+                |m: &mut packet_data| { &mut m.labels },
             ));
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeInt64>(
-                "packet_slice_start",
-                |m: &packet_data| { &m.packet_slice_start },
-                |m: &mut packet_data| { &mut m.packet_slice_start },
+                "content_slice_index",
+                |m: &packet_data| { &m.content_slice_index },
+                |m: &mut packet_data| { &mut m.content_slice_index },
             ));
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeInt64>(
-                "packet_slice_count",
-                |m: &packet_data| { &m.packet_slice_count },
-                |m: &mut packet_data| { &mut m.packet_slice_count },
+                "content_slice_count",
+                |m: &packet_data| { &m.content_slice_count },
+                |m: &mut packet_data| { &mut m.content_slice_count },
             ));
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeInt64>(
-                "packet_length",
-                |m: &packet_data| { &m.packet_length },
-                |m: &mut packet_data| { &mut m.packet_length },
+                "content_slice_length",
+                |m: &packet_data| { &m.content_slice_length },
+                |m: &mut packet_data| { &mut m.content_slice_length },
             ));
             ::protobuf::reflect::MessageDescriptor::new_pb_name::<packet_data>(
                 "packet_data",
@@ -940,10 +940,10 @@ impl ::protobuf::Clear for packet_data {
         self.content.clear();
         self.flags = 0;
         self.options.clear();
-        self.tags.clear();
-        self.packet_slice_start = 0;
-        self.packet_slice_count = 0;
-        self.packet_length = 0;
+        self.labels.clear();
+        self.content_slice_index = 0;
+        self.content_slice_count = 0;
+        self.content_slice_length = 0;
         self.unknown_fields.clear();
     }
 }
@@ -961,7 +961,7 @@ impl ::protobuf::reflect::ProtobufValue for packet_data {
 }
 
 #[derive(PartialEq,Clone,Default)]
-pub struct msg_head {
+pub struct message_head {
     // message fields
     pub version: i32,
     pub source: ::std::vec::Vec<u8>,
@@ -971,14 +971,14 @@ pub struct msg_head {
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl<'a> ::std::default::Default for &'a msg_head {
-    fn default() -> &'a msg_head {
-        <msg_head as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a message_head {
+    fn default() -> &'a message_head {
+        <message_head as ::protobuf::Message>::default_instance()
     }
 }
 
-impl msg_head {
-    pub fn new() -> msg_head {
+impl message_head {
+    pub fn new() -> message_head {
         ::std::default::Default::default()
     }
 
@@ -1050,7 +1050,7 @@ impl msg_head {
     }
 }
 
-impl ::protobuf::Message for msg_head {
+impl ::protobuf::Message for message_head {
     fn is_initialized(&self) -> bool {
         true
     }
@@ -1138,8 +1138,8 @@ impl ::protobuf::Message for msg_head {
         Self::descriptor_static()
     }
 
-    fn new() -> msg_head {
-        msg_head::new()
+    fn new() -> message_head {
+        message_head::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
@@ -1148,34 +1148,34 @@ impl ::protobuf::Message for msg_head {
             let mut fields = ::std::vec::Vec::new();
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeInt32>(
                 "version",
-                |m: &msg_head| { &m.version },
-                |m: &mut msg_head| { &mut m.version },
+                |m: &message_head| { &m.version },
+                |m: &mut message_head| { &mut m.version },
             ));
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                 "source",
-                |m: &msg_head| { &m.source },
-                |m: &mut msg_head| { &mut m.source },
+                |m: &message_head| { &m.source },
+                |m: &mut message_head| { &mut m.source },
             ));
             fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                 "destination",
-                |m: &msg_head| { &m.destination },
-                |m: &mut msg_head| { &mut m.destination },
+                |m: &message_head| { &m.destination },
+                |m: &mut message_head| { &mut m.destination },
             ));
-            ::protobuf::reflect::MessageDescriptor::new_pb_name::<msg_head>(
-                "msg_head",
+            ::protobuf::reflect::MessageDescriptor::new_pb_name::<message_head>(
+                "message_head",
                 fields,
                 file_descriptor_proto()
             )
         })
     }
 
-    fn default_instance() -> &'static msg_head {
-        static instance: ::protobuf::rt::LazyV2<msg_head> = ::protobuf::rt::LazyV2::INIT;
-        instance.get(msg_head::new)
+    fn default_instance() -> &'static message_head {
+        static instance: ::protobuf::rt::LazyV2<message_head> = ::protobuf::rt::LazyV2::INIT;
+        instance.get(message_head::new)
     }
 }
 
-impl ::protobuf::Clear for msg_head {
+impl ::protobuf::Clear for message_head {
     fn clear(&mut self) {
         self.version = 0;
         self.source.clear();
@@ -1184,53 +1184,53 @@ impl ::protobuf::Clear for msg_head {
     }
 }
 
-impl ::std::fmt::Debug for msg_head {
+impl ::std::fmt::Debug for message_head {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for msg_head {
+impl ::protobuf::reflect::ProtobufValue for message_head {
     fn as_ref(&self) -> ::protobuf::reflect::ReflectValueRef {
         ::protobuf::reflect::ReflectValueRef::Message(self)
     }
 }
 
 #[derive(PartialEq,Clone,Default)]
-pub struct msg {
+pub struct message {
     // message fields
-    pub head: ::protobuf::SingularPtrField<msg_head>,
+    pub head: ::protobuf::SingularPtrField<message_head>,
     // message oneof groups
-    pub msg_body: ::std::option::Option<msg_oneof_msg_body>,
+    pub body: ::std::option::Option<message_oneof_body>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl<'a> ::std::default::Default for &'a msg {
-    fn default() -> &'a msg {
-        <msg as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a message {
+    fn default() -> &'a message {
+        <message as ::protobuf::Message>::default_instance()
     }
 }
 
 #[derive(Clone,PartialEq,Debug)]
-pub enum msg_oneof_msg_body {
+pub enum message_oneof_body {
     node_ping(ping_data),
     node_pong(ping_data),
     command(command_data),
-    forward(packet_data),
+    packet(packet_data),
 }
 
-impl msg {
-    pub fn new() -> msg {
+impl message {
+    pub fn new() -> message {
         ::std::default::Default::default()
     }
 
-    // .atbus.protocol.msg_head head = 1;
+    // .atbus.protocol.message_head head = 1;
 
 
-    pub fn get_head(&self) -> &msg_head {
-        self.head.as_ref().unwrap_or_else(|| <msg_head as ::protobuf::Message>::default_instance())
+    pub fn get_head(&self) -> &message_head {
+        self.head.as_ref().unwrap_or_else(|| <message_head as ::protobuf::Message>::default_instance())
     }
     pub fn clear_head(&mut self) {
         self.head.clear();
@@ -1241,13 +1241,13 @@ impl msg {
     }
 
     // Param is passed by value, moved
-    pub fn set_head(&mut self, v: msg_head) {
+    pub fn set_head(&mut self, v: message_head) {
         self.head = ::protobuf::SingularPtrField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_head(&mut self) -> &mut msg_head {
+    pub fn mut_head(&mut self) -> &mut message_head {
         if self.head.is_none() {
             self.head.set_default();
         }
@@ -1255,43 +1255,43 @@ impl msg {
     }
 
     // Take field
-    pub fn take_head(&mut self) -> msg_head {
-        self.head.take().unwrap_or_else(|| msg_head::new())
+    pub fn take_head(&mut self) -> message_head {
+        self.head.take().unwrap_or_else(|| message_head::new())
     }
 
     // .atbus.protocol.ping_data node_ping = 11;
 
 
     pub fn get_node_ping(&self) -> &ping_data {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_ping(ref v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_ping(ref v)) => v,
             _ => <ping_data as ::protobuf::Message>::default_instance(),
         }
     }
     pub fn clear_node_ping(&mut self) {
-        self.msg_body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
     }
 
     pub fn has_node_ping(&self) -> bool {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_ping(..)) => true,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_ping(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_node_ping(&mut self, v: ping_data) {
-        self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_ping(v))
+        self.body = ::std::option::Option::Some(message_oneof_body::node_ping(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_node_ping(&mut self) -> &mut ping_data {
-        if let ::std::option::Option::Some(msg_oneof_msg_body::node_ping(_)) = self.msg_body {
+        if let ::std::option::Option::Some(message_oneof_body::node_ping(_)) = self.body {
         } else {
-            self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_ping(ping_data::new()));
+            self.body = ::std::option::Option::Some(message_oneof_body::node_ping(ping_data::new()));
         }
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_ping(ref mut v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_ping(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -1299,8 +1299,8 @@ impl msg {
     // Take field
     pub fn take_node_ping(&mut self) -> ping_data {
         if self.has_node_ping() {
-            match self.msg_body.take() {
-                ::std::option::Option::Some(msg_oneof_msg_body::node_ping(v)) => v,
+            match self.body.take() {
+                ::std::option::Option::Some(message_oneof_body::node_ping(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -1312,35 +1312,35 @@ impl msg {
 
 
     pub fn get_node_pong(&self) -> &ping_data {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_pong(ref v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_pong(ref v)) => v,
             _ => <ping_data as ::protobuf::Message>::default_instance(),
         }
     }
     pub fn clear_node_pong(&mut self) {
-        self.msg_body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
     }
 
     pub fn has_node_pong(&self) -> bool {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_pong(..)) => true,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_pong(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_node_pong(&mut self, v: ping_data) {
-        self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_pong(v))
+        self.body = ::std::option::Option::Some(message_oneof_body::node_pong(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_node_pong(&mut self) -> &mut ping_data {
-        if let ::std::option::Option::Some(msg_oneof_msg_body::node_pong(_)) = self.msg_body {
+        if let ::std::option::Option::Some(message_oneof_body::node_pong(_)) = self.body {
         } else {
-            self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_pong(ping_data::new()));
+            self.body = ::std::option::Option::Some(message_oneof_body::node_pong(ping_data::new()));
         }
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::node_pong(ref mut v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::node_pong(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -1348,8 +1348,8 @@ impl msg {
     // Take field
     pub fn take_node_pong(&mut self) -> ping_data {
         if self.has_node_pong() {
-            match self.msg_body.take() {
-                ::std::option::Option::Some(msg_oneof_msg_body::node_pong(v)) => v,
+            match self.body.take() {
+                ::std::option::Option::Some(message_oneof_body::node_pong(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -1361,35 +1361,35 @@ impl msg {
 
 
     pub fn get_command(&self) -> &command_data {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::command(ref v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::command(ref v)) => v,
             _ => <command_data as ::protobuf::Message>::default_instance(),
         }
     }
     pub fn clear_command(&mut self) {
-        self.msg_body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
     }
 
     pub fn has_command(&self) -> bool {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::command(..)) => true,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::command(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
     pub fn set_command(&mut self, v: command_data) {
-        self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::command(v))
+        self.body = ::std::option::Option::Some(message_oneof_body::command(v))
     }
 
     // Mutable pointer to the field.
     pub fn mut_command(&mut self) -> &mut command_data {
-        if let ::std::option::Option::Some(msg_oneof_msg_body::command(_)) = self.msg_body {
+        if let ::std::option::Option::Some(message_oneof_body::command(_)) = self.body {
         } else {
-            self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::command(command_data::new()));
+            self.body = ::std::option::Option::Some(message_oneof_body::command(command_data::new()));
         }
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::command(ref mut v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::command(ref mut v)) => v,
             _ => panic!(),
         }
     }
@@ -1397,8 +1397,8 @@ impl msg {
     // Take field
     pub fn take_command(&mut self) -> command_data {
         if self.has_command() {
-            match self.msg_body.take() {
-                ::std::option::Option::Some(msg_oneof_msg_body::command(v)) => v,
+            match self.body.take() {
+                ::std::option::Option::Some(message_oneof_body::command(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -1406,48 +1406,48 @@ impl msg {
         }
     }
 
-    // .atbus.protocol.packet_data forward = 14;
+    // .atbus.protocol.packet_data packet = 14;
 
 
-    pub fn get_forward(&self) -> &packet_data {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::forward(ref v)) => v,
+    pub fn get_packet(&self) -> &packet_data {
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::packet(ref v)) => v,
             _ => <packet_data as ::protobuf::Message>::default_instance(),
         }
     }
-    pub fn clear_forward(&mut self) {
-        self.msg_body = ::std::option::Option::None;
+    pub fn clear_packet(&mut self) {
+        self.body = ::std::option::Option::None;
     }
 
-    pub fn has_forward(&self) -> bool {
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::forward(..)) => true,
+    pub fn has_packet(&self) -> bool {
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::packet(..)) => true,
             _ => false,
         }
     }
 
     // Param is passed by value, moved
-    pub fn set_forward(&mut self, v: packet_data) {
-        self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::forward(v))
+    pub fn set_packet(&mut self, v: packet_data) {
+        self.body = ::std::option::Option::Some(message_oneof_body::packet(v))
     }
 
     // Mutable pointer to the field.
-    pub fn mut_forward(&mut self) -> &mut packet_data {
-        if let ::std::option::Option::Some(msg_oneof_msg_body::forward(_)) = self.msg_body {
+    pub fn mut_packet(&mut self) -> &mut packet_data {
+        if let ::std::option::Option::Some(message_oneof_body::packet(_)) = self.body {
         } else {
-            self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::forward(packet_data::new()));
+            self.body = ::std::option::Option::Some(message_oneof_body::packet(packet_data::new()));
         }
-        match self.msg_body {
-            ::std::option::Option::Some(msg_oneof_msg_body::forward(ref mut v)) => v,
+        match self.body {
+            ::std::option::Option::Some(message_oneof_body::packet(ref mut v)) => v,
             _ => panic!(),
         }
     }
 
     // Take field
-    pub fn take_forward(&mut self) -> packet_data {
-        if self.has_forward() {
-            match self.msg_body.take() {
-                ::std::option::Option::Some(msg_oneof_msg_body::forward(v)) => v,
+    pub fn take_packet(&mut self) -> packet_data {
+        if self.has_packet() {
+            match self.body.take() {
+                ::std::option::Option::Some(message_oneof_body::packet(v)) => v,
                 _ => panic!(),
             }
         } else {
@@ -1456,29 +1456,29 @@ impl msg {
     }
 }
 
-impl ::protobuf::Message for msg {
+impl ::protobuf::Message for message {
     fn is_initialized(&self) -> bool {
         for v in &self.head {
             if !v.is_initialized() {
                 return false;
             }
         };
-        if let Some(msg_oneof_msg_body::node_ping(ref v)) = self.msg_body {
+        if let Some(message_oneof_body::node_ping(ref v)) = self.body {
             if !v.is_initialized() {
                 return false;
             }
         }
-        if let Some(msg_oneof_msg_body::node_pong(ref v)) = self.msg_body {
+        if let Some(message_oneof_body::node_pong(ref v)) = self.body {
             if !v.is_initialized() {
                 return false;
             }
         }
-        if let Some(msg_oneof_msg_body::command(ref v)) = self.msg_body {
+        if let Some(message_oneof_body::command(ref v)) = self.body {
             if !v.is_initialized() {
                 return false;
             }
         }
-        if let Some(msg_oneof_msg_body::forward(ref v)) = self.msg_body {
+        if let Some(message_oneof_body::packet(ref v)) = self.body {
             if !v.is_initialized() {
                 return false;
             }
@@ -1497,25 +1497,25 @@ impl ::protobuf::Message for msg {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_ping(is.read_message()?));
+                    self.body = ::std::option::Option::Some(message_oneof_body::node_ping(is.read_message()?));
                 },
                 12 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::node_pong(is.read_message()?));
+                    self.body = ::std::option::Option::Some(message_oneof_body::node_pong(is.read_message()?));
                 },
                 13 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::command(is.read_message()?));
+                    self.body = ::std::option::Option::Some(message_oneof_body::command(is.read_message()?));
                 },
                 14 => {
                     if wire_type != ::protobuf::wire_format::WireTypeLengthDelimited {
                         return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
                     }
-                    self.msg_body = ::std::option::Option::Some(msg_oneof_msg_body::forward(is.read_message()?));
+                    self.body = ::std::option::Option::Some(message_oneof_body::packet(is.read_message()?));
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1533,21 +1533,21 @@ impl ::protobuf::Message for msg {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        if let ::std::option::Option::Some(ref v) = self.msg_body {
+        if let ::std::option::Option::Some(ref v) = self.body {
             match v {
-                &msg_oneof_msg_body::node_ping(ref v) => {
+                &message_oneof_body::node_ping(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
-                &msg_oneof_msg_body::node_pong(ref v) => {
+                &message_oneof_body::node_pong(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
-                &msg_oneof_msg_body::command(ref v) => {
+                &message_oneof_body::command(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
-                &msg_oneof_msg_body::forward(ref v) => {
+                &message_oneof_body::packet(ref v) => {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
                 },
@@ -1564,24 +1564,24 @@ impl ::protobuf::Message for msg {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        if let ::std::option::Option::Some(ref v) = self.msg_body {
+        if let ::std::option::Option::Some(ref v) = self.body {
             match v {
-                &msg_oneof_msg_body::node_ping(ref v) => {
+                &message_oneof_body::node_ping(ref v) => {
                     os.write_tag(11, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
                 },
-                &msg_oneof_msg_body::node_pong(ref v) => {
+                &message_oneof_body::node_pong(ref v) => {
                     os.write_tag(12, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
                 },
-                &msg_oneof_msg_body::command(ref v) => {
+                &message_oneof_body::command(ref v) => {
                     os.write_tag(13, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
                 },
-                &msg_oneof_msg_body::forward(ref v) => {
+                &message_oneof_body::packet(ref v) => {
                     os.write_tag(14, ::protobuf::wire_format::WireTypeLengthDelimited)?;
                     os.write_raw_varint32(v.get_cached_size())?;
                     v.write_to_with_cached_sizes(os)?;
@@ -1618,71 +1618,71 @@ impl ::protobuf::Message for msg {
         Self::descriptor_static()
     }
 
-    fn new() -> msg {
-        msg::new()
+    fn new() -> message {
+        message::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
         static descriptor: ::protobuf::rt::LazyV2<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::LazyV2::INIT;
         descriptor.get(|| {
             let mut fields = ::std::vec::Vec::new();
-            fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<msg_head>>(
+            fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<message_head>>(
                 "head",
-                |m: &msg| { &m.head },
-                |m: &mut msg| { &mut m.head },
+                |m: &message| { &m.head },
+                |m: &mut message| { &mut m.head },
             ));
             fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, ping_data>(
                 "node_ping",
-                msg::has_node_ping,
-                msg::get_node_ping,
+                message::has_node_ping,
+                message::get_node_ping,
             ));
             fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, ping_data>(
                 "node_pong",
-                msg::has_node_pong,
-                msg::get_node_pong,
+                message::has_node_pong,
+                message::get_node_pong,
             ));
             fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, command_data>(
                 "command",
-                msg::has_command,
-                msg::get_command,
+                message::has_command,
+                message::get_command,
             ));
             fields.push(::protobuf::reflect::accessor::make_singular_message_accessor::<_, packet_data>(
-                "forward",
-                msg::has_forward,
-                msg::get_forward,
+                "packet",
+                message::has_packet,
+                message::get_packet,
             ));
-            ::protobuf::reflect::MessageDescriptor::new_pb_name::<msg>(
-                "msg",
+            ::protobuf::reflect::MessageDescriptor::new_pb_name::<message>(
+                "message",
                 fields,
                 file_descriptor_proto()
             )
         })
     }
 
-    fn default_instance() -> &'static msg {
-        static instance: ::protobuf::rt::LazyV2<msg> = ::protobuf::rt::LazyV2::INIT;
-        instance.get(msg::new)
+    fn default_instance() -> &'static message {
+        static instance: ::protobuf::rt::LazyV2<message> = ::protobuf::rt::LazyV2::INIT;
+        instance.get(message::new)
     }
 }
 
-impl ::protobuf::Clear for msg {
+impl ::protobuf::Clear for message {
     fn clear(&mut self) {
         self.head.clear();
-        self.msg_body = ::std::option::Option::None;
-        self.msg_body = ::std::option::Option::None;
-        self.msg_body = ::std::option::Option::None;
-        self.msg_body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
+        self.body = ::std::option::Option::None;
         self.unknown_fields.clear();
     }
 }
 
-impl ::std::fmt::Debug for msg {
+impl ::std::fmt::Debug for message {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for msg {
+impl ::protobuf::reflect::ProtobufValue for message {
     fn as_ref(&self) -> ::protobuf::reflect::ReflectValueRef {
         ::protobuf::reflect::ReflectValueRef::Message(self)
     }
@@ -1692,6 +1692,7 @@ impl ::protobuf::reflect::ProtobufValue for msg {
 #[derive(Clone,Eq,Debug)]
 pub enum ATBUS_PROTOCOL_CONST {
     ATBUS_PROTOCOL_CONST_UNKNOWN, // 0
+    ATBUS_PROTOCOL_MAGIC_NUMBER, // 16777619
     ATBUS_PROTOCOL_VERSION, // 3
     ATBUS_PROTOCOL_MINIMAL_VERSION, // 3
 }
@@ -1712,6 +1713,7 @@ impl ::protobuf::ProtobufEnum for ATBUS_PROTOCOL_CONST {
     fn value(&self) -> i32 {
         match *self {
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_CONST_UNKNOWN => 0,
+            ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_MAGIC_NUMBER => 16777619,
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_VERSION => 3,
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_MINIMAL_VERSION => 3,
         }
@@ -1720,6 +1722,7 @@ impl ::protobuf::ProtobufEnum for ATBUS_PROTOCOL_CONST {
     fn from_i32(value: i32) -> ::std::option::Option<ATBUS_PROTOCOL_CONST> {
         match value {
             0 => ::std::option::Option::Some(ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_CONST_UNKNOWN),
+            16777619 => ::std::option::Option::Some(ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_MAGIC_NUMBER),
             3 => ::std::option::Option::Some(ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_VERSION),
             _ => ::std::option::Option::None
         }
@@ -1728,6 +1731,7 @@ impl ::protobuf::ProtobufEnum for ATBUS_PROTOCOL_CONST {
     fn values() -> &'static [Self] {
         static values: &'static [ATBUS_PROTOCOL_CONST] = &[
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_CONST_UNKNOWN,
+            ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_MAGIC_NUMBER,
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_VERSION,
             ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_MINIMAL_VERSION,
         ];
@@ -1812,40 +1816,42 @@ impl ::protobuf::reflect::ProtobufValue for ATBUS_PACKET_FLAG_TYPE {
 
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x17libatbus_protocol.proto\x12\x0eatbus.protocol\x1a\x16libatbus_opti\
-    ons.proto\"\x93\x02\n\x0ccommand_data\x12\x1a\n\x08sequence\x18\x01\x20\
+    ons.proto\"\x9b\x02\n\x0ccommand_data\x12\x1a\n\x08sequence\x18\x01\x20\
     \x01(\x03R\x08sequence\x12\x1c\n\targuments\x18\x02\x20\x03(\x0cR\targum\
     ents\x129\n\x07options\x18\x03\x20\x01(\x0b2\x1f.atbus.protocol.command_\
-    optionsR\x07options\x12:\n\x04tags\x18\x04\x20\x03(\x0b2&.atbus.protocol\
-    .command_data.TagsEntryR\x04tags\x1aR\n\tTagsEntry\x12\x10\n\x03key\x18\
-    \x01\x20\x01(\tR\x03key\x12/\n\x05value\x18\x02\x20\x01(\x0b2\x19.atbus.\
-    protocol.any_valueR\x05value:\x028\x01\"E\n\tping_data\x12\x1a\n\x08sequ\
-    ence\x18\x01\x20\x01(\x03R\x08sequence\x12\x1c\n\ttimepoint\x18\x02\x20\
-    \x01(\x03R\ttimepoint\"\xdf\x03\n\x0bpacket_data\x12'\n\x0fpacket_sequen\
-    ce\x18\x01\x20\x01(\x03R\x0epacketSequence\x12-\n\x12packet_acknowledge\
-    \x18\x02\x20\x01(\x03R\x11packetAcknowledge\x12\x18\n\x07content\x18\x03\
-    \x20\x01(\x0cR\x07content\x12\x14\n\x05flags\x18\x04\x20\x01(\x05R\x05fl\
-    ags\x128\n\x07options\x18\x05\x20\x01(\x0b2\x1e.atbus.protocol.packet_op\
-    tionsR\x07options\x129\n\x04tags\x18\x06\x20\x03(\x0b2%.atbus.protocol.p\
-    acket_data.TagsEntryR\x04tags\x12,\n\x12packet_slice_start\x18\x07\x20\
-    \x01(\x03R\x10packetSliceStart\x12,\n\x12packet_slice_count\x18\x08\x20\
-    \x01(\x03R\x10packetSliceCount\x12#\n\rpacket_length\x18\t\x20\x01(\x03R\
-    \x0cpacketLength\x1aR\n\tTagsEntry\x12\x10\n\x03key\x18\x01\x20\x01(\tR\
-    \x03key\x12/\n\x05value\x18\x02\x20\x01(\x0b2\x19.atbus.protocol.any_val\
-    ueR\x05value:\x028\x01\"^\n\x08msg_head\x12\x18\n\x07version\x18\x01\x20\
-    \x01(\x05R\x07version\x12\x16\n\x06source\x18\x02\x20\x01(\x0cR\x06sourc\
-    e\x12\x20\n\x0bdestination\x18\x03\x20\x01(\x0cR\x0bdestination\"\xa6\
-    \x02\n\x03msg\x12,\n\x04head\x18\x01\x20\x01(\x0b2\x18.atbus.protocol.ms\
-    g_headR\x04head\x128\n\tnode_ping\x18\x0b\x20\x01(\x0b2\x19.atbus.protoc\
-    ol.ping_dataH\0R\x08nodePing\x128\n\tnode_pong\x18\x0c\x20\x01(\x0b2\x19\
-    .atbus.protocol.ping_dataH\0R\x08nodePong\x128\n\x07command\x18\r\x20\
-    \x01(\x0b2\x1c.atbus.protocol.command_dataH\0R\x07command\x127\n\x07forw\
-    ard\x18\x0e\x20\x01(\x0b2\x1b.atbus.protocol.packet_dataH\0R\x07forwardB\
-    \n\n\x08msg_body*|\n\x14ATBUS_PROTOCOL_CONST\x12\x20\n\x1cATBUS_PROTOCOL\
-    _CONST_UNKNOWN\x10\0\x12\x1a\n\x16ATBUS_PROTOCOL_VERSION\x10\x03\x12\"\n\
-    \x1eATBUS_PROTOCOL_MINIMAL_VERSION\x10\x03\x1a\x02\x10\x01*\x84\x01\n\
-    \x16ATBUS_PACKET_FLAG_TYPE\x12\x1a\n\x16ATBUS_PACKET_FLAG_NONE\x10\0\x12\
-    $\n\x20ATBUS_PACKET_FLAG_RESET_SEQUENCE\x10\x01\x12(\n$ATBUS_PACKET_FLAG\
-    _ROUTER_UNREACHABLE\x10\x02B\x05H\x01\xf8\x01\x01b\x06proto3\
+    optionsR\x07options\x12@\n\x06labels\x18\x04\x20\x03(\x0b2(.atbus.protoc\
+    ol.command_data.LabelsEntryR\x06labels\x1aT\n\x0bLabelsEntry\x12\x10\n\
+    \x03key\x18\x01\x20\x01(\tR\x03key\x12/\n\x05value\x18\x02\x20\x01(\x0b2\
+    \x19.atbus.protocol.any_valueR\x05value:\x028\x01\"E\n\tping_data\x12\
+    \x1a\n\x08sequence\x18\x01\x20\x01(\x03R\x08sequence\x12\x1c\n\ttimepoin\
+    t\x18\x02\x20\x01(\x03R\ttimepoint\"\xf8\x03\n\x0bpacket_data\x12'\n\x0f\
+    packet_sequence\x18\x01\x20\x01(\x03R\x0epacketSequence\x12-\n\x12packet\
+    _acknowledge\x18\x02\x20\x01(\x03R\x11packetAcknowledge\x12\x18\n\x07con\
+    tent\x18\x03\x20\x01(\x0cR\x07content\x12\x14\n\x05flags\x18\x04\x20\x01\
+    (\x05R\x05flags\x128\n\x07options\x18\x05\x20\x01(\x0b2\x1e.atbus.protoc\
+    ol.packet_optionsR\x07options\x12?\n\x06labels\x18\x06\x20\x03(\x0b2'.at\
+    bus.protocol.packet_data.LabelsEntryR\x06labels\x12.\n\x13content_slice_\
+    index\x18\x07\x20\x01(\x03R\x11contentSliceIndex\x12.\n\x13content_slice\
+    _count\x18\x08\x20\x01(\x03R\x11contentSliceCount\x120\n\x14content_slic\
+    e_length\x18\t\x20\x01(\x03R\x12contentSliceLength\x1aT\n\x0bLabelsEntry\
+    \x12\x10\n\x03key\x18\x01\x20\x01(\tR\x03key\x12/\n\x05value\x18\x02\x20\
+    \x01(\x0b2\x19.atbus.protocol.any_valueR\x05value:\x028\x01\"b\n\x0cmess\
+    age_head\x12\x18\n\x07version\x18\x01\x20\x01(\x05R\x07version\x12\x16\n\
+    \x06source\x18\x02\x20\x01(\x0cR\x06source\x12\x20\n\x0bdestination\x18\
+    \x03\x20\x01(\x0cR\x0bdestination\"\xa8\x02\n\x07message\x120\n\x04head\
+    \x18\x01\x20\x01(\x0b2\x1c.atbus.protocol.message_headR\x04head\x128\n\t\
+    node_ping\x18\x0b\x20\x01(\x0b2\x19.atbus.protocol.ping_dataH\0R\x08node\
+    Ping\x128\n\tnode_pong\x18\x0c\x20\x01(\x0b2\x19.atbus.protocol.ping_dat\
+    aH\0R\x08nodePong\x128\n\x07command\x18\r\x20\x01(\x0b2\x1c.atbus.protoc\
+    ol.command_dataH\0R\x07command\x125\n\x06packet\x18\x0e\x20\x01(\x0b2\
+    \x1b.atbus.protocol.packet_dataH\0R\x06packetB\x06\n\x04body*\xa0\x01\n\
+    \x14ATBUS_PROTOCOL_CONST\x12\x20\n\x1cATBUS_PROTOCOL_CONST_UNKNOWN\x10\0\
+    \x12\"\n\x1bATBUS_PROTOCOL_MAGIC_NUMBER\x10\x93\x83\x80\x08\x12\x1a\n\
+    \x16ATBUS_PROTOCOL_VERSION\x10\x03\x12\"\n\x1eATBUS_PROTOCOL_MINIMAL_VER\
+    SION\x10\x03\x1a\x02\x10\x01*\x84\x01\n\x16ATBUS_PACKET_FLAG_TYPE\x12\
+    \x1a\n\x16ATBUS_PACKET_FLAG_NONE\x10\0\x12$\n\x20ATBUS_PACKET_FLAG_RESET\
+    _SEQUENCE\x10\x01\x12(\n$ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE\x10\x02B\
+    \x05H\x01\xf8\x01\x01b\x06proto3\
 ";
 
 static file_descriptor_proto_lazy: ::protobuf::rt::LazyV2<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::rt::LazyV2::INIT;
