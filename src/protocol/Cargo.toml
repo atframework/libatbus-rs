@@ -12,8 +12,12 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-#[lib]
+autobenches = false # It's nightly now
+
+[lib]
 #proc-macro = true
+bench = false # It's nightly now
+harness = true
 
 [dependencies]
 # syn = { version = "1" }

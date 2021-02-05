@@ -9,6 +9,7 @@ extern crate rand;
 mod frame_block;
 
 pub mod decoder;
+pub mod encoder;
 pub mod error;
 pub mod proto;
 

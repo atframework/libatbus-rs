@@ -72,7 +72,7 @@ impl FrameBlockAlgorithm {
             let mut loff = 7;
             loop {
                 if consume >= 10 {
-                    return Err(ProtocolError::IncorrectVarint);
+                    return Err(ProtocolError::BadFrameLength);
                 }
 
                 if consume >= rem.len() {
@@ -112,17 +112,22 @@ impl FrameBlockAlgorithm {
 
     /// Encode frame length into buffer and return the consumed buffer length
     #[inline]
-    pub fn encode_frame_length<U: AsMut<[u8]>>(
-        output: &mut U,
-        mut value: u64,
+    pub fn encode_frame_length<T: AsMut<[u8]>, U: Into<u64>>(
+        output: &mut T,
+        input: U,
     ) -> ProtocolResult<usize> {
+        let origin_input: u64 = input.into();
+        let mut value: u64 = origin_input;
         let mut consume: usize = 0;
         let buf = output.as_mut();
 
         unsafe {
             while (value & !0x7F) > 0 {
                 if consume >= buf.len() {
-                    return Err(ProtocolError::BufferNotEnough);
+                    return Err(ProtocolError::BufferNotEnough(
+                        FrameBlockAlgorithm::compute_frame_length_consume(origin_input),
+                        buf.len(),
+                    ));
                 }
 
                 *buf.get_unchecked_mut(consume) = ((value & 0x7F) | 0x80) as u8;
@@ -131,7 +136,10 @@ impl FrameBlockAlgorithm {
             }
 
             if consume >= buf.len() {
-                return Err(ProtocolError::BufferNotEnough);
+                return Err(ProtocolError::BufferNotEnough(
+                    FrameBlockAlgorithm::compute_frame_length_consume(origin_input),
+                    buf.len(),
+                ));
             }
 
             *buf.get_unchecked_mut(consume) = value as u8;
@@ -197,10 +205,10 @@ mod test {
             0x96, 0x96, 0x96, 0x96, 0x96, 0x96, 0x96, 0x96, 0x96, 0x96,
         ]);
         match decode_result.unwrap_err() {
-            ProtocolError::IncorrectVarint => assert!(true),
+            ProtocolError::BadFrameLength => assert!(true),
             e => panic!(
                 "Expect {:?}: real got {:?}",
-                ProtocolError::IncorrectVarint,
+                ProtocolError::BadFrameLength,
                 e
             ),
         }
@@ -248,13 +256,18 @@ mod test {
     fn test_encode_frame_length_error() {
         let mut buffer: [u8; FRAME_VARINT_RESERVE_SIZE] = [0; FRAME_VARINT_RESERVE_SIZE];
         let mut invalid_buffer = &mut buffer[0..9];
-        let encode_result =
-            FrameBlockAlgorithm::encode_frame_length(&mut invalid_buffer, 0xffffffffffffffff);
+        let encode_result = FrameBlockAlgorithm::encode_frame_length(
+            &mut invalid_buffer,
+            0xffffffffffffffff as u64,
+        );
         match encode_result.unwrap_err() {
-            ProtocolError::BufferNotEnough => assert!(true),
+            ProtocolError::BufferNotEnough(need, has) => {
+                assert_eq!(need, 10);
+                assert_eq!(has, 9);
+            }
             e => panic!(
                 "Expect {:?}: real got {:?}",
-                ProtocolError::BufferNotEnough,
+                ProtocolError::BufferNotEnough(10, 9),
                 e
             ),
         }
@@ -266,7 +279,7 @@ mod test {
 
         assert_eq!(
             1,
-            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 7).unwrap()
+            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 7 as u64).unwrap()
         );
         assert_eq!(
             1,
@@ -276,7 +289,7 @@ mod test {
 
         assert_eq!(
             2,
-            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 150).unwrap()
+            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 150 as u64).unwrap()
         );
         assert_eq!(
             2,
@@ -287,7 +300,7 @@ mod test {
         let mut valid_buffer = &mut buffer[0..10];
         assert_eq!(
             10,
-            FrameBlockAlgorithm::encode_frame_length(&mut valid_buffer, 0xffffffffffffffff)
+            FrameBlockAlgorithm::encode_frame_length(&mut valid_buffer, 0xffffffffffffffff as u64)
                 .unwrap()
         );
         assert_eq!(
@@ -301,7 +314,7 @@ mod test {
 
         assert_eq!(
             5,
-            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 0xffffffff).unwrap()
+            FrameBlockAlgorithm::encode_frame_length(&mut buffer, 0xffffffff as u64).unwrap()
         );
         assert_eq!(
             5,
