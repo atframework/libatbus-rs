@@ -29,7 +29,7 @@ pub struct command_data {
     pub sequence: i64,
     pub arguments: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
     pub options: ::protobuf::SingularPtrField<super::libatbus_options::command_options>,
-    pub labels: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
+    pub labels: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -122,7 +122,7 @@ impl command_data {
     // repeated .atbus.protocol.command_data.LabelsEntry labels = 4;
 
 
-    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, ::std::string::String> {
         &self.labels
     }
     pub fn clear_labels(&mut self) {
@@ -130,17 +130,17 @@ impl command_data {
     }
 
     // Param is passed by value, moved
-    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
+    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, ::std::string::String>) {
         self.labels = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, ::std::string::String> {
         &mut self.labels
     }
 
     // Take field
-    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, ::std::string::String> {
         ::std::mem::replace(&mut self.labels, ::std::collections::HashMap::new())
     }
 }
@@ -173,7 +173,7 @@ impl ::protobuf::Message for command_data {
                     ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.options)?;
                 },
                 4 => {
-                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.labels)?;
+                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(wire_type, is, &mut self.labels)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -197,7 +197,7 @@ impl ::protobuf::Message for command_data {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.labels);
+        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(4, &self.labels);
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
@@ -215,7 +215,7 @@ impl ::protobuf::Message for command_data {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(4, &self.labels, os)?;
+        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(4, &self.labels, os)?;
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -269,7 +269,7 @@ impl ::protobuf::Message for command_data {
                 |m: &command_data| { &m.options },
                 |m: &mut command_data| { &mut m.options },
             ));
-            fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(
+            fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(
                 "labels",
                 |m: &command_data| { &m.labels },
                 |m: &mut command_data| { &mut m.labels },
@@ -505,7 +505,7 @@ pub struct packet_data {
     pub content: ::std::vec::Vec<u8>,
     pub flags: i32,
     pub options: ::protobuf::SingularPtrField<super::libatbus_options::packet_options>,
-    pub labels: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>,
+    pub labels: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
     pub content_slice_index: i64,
     pub content_slice_count: i64,
     pub content_slice_length: i64,
@@ -632,7 +632,7 @@ impl packet_data {
     // repeated .atbus.protocol.packet_data.LabelsEntry labels = 6;
 
 
-    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn get_labels(&self) -> &::std::collections::HashMap<::std::string::String, ::std::string::String> {
         &self.labels
     }
     pub fn clear_labels(&mut self) {
@@ -640,17 +640,17 @@ impl packet_data {
     }
 
     // Param is passed by value, moved
-    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value>) {
+    pub fn set_labels(&mut self, v: ::std::collections::HashMap<::std::string::String, ::std::string::String>) {
         self.labels = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn mut_labels(&mut self) -> &mut ::std::collections::HashMap<::std::string::String, ::std::string::String> {
         &mut self.labels
     }
 
     // Take field
-    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, super::libatbus_options::any_value> {
+    pub fn take_labels(&mut self) -> ::std::collections::HashMap<::std::string::String, ::std::string::String> {
         ::std::mem::replace(&mut self.labels, ::std::collections::HashMap::new())
     }
 
@@ -742,7 +742,7 @@ impl ::protobuf::Message for packet_data {
                     ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.options)?;
                 },
                 6 => {
-                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(wire_type, is, &mut self.labels)?;
+                    ::protobuf::rt::read_map_into::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(wire_type, is, &mut self.labels)?;
                 },
                 7 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
@@ -793,7 +793,7 @@ impl ::protobuf::Message for packet_data {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.labels);
+        my_size += ::protobuf::rt::compute_map_size::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(6, &self.labels);
         if self.content_slice_index != 0 {
             my_size += ::protobuf::rt::value_size(7, self.content_slice_index, ::protobuf::wire_format::WireTypeVarint);
         }
@@ -826,7 +826,7 @@ impl ::protobuf::Message for packet_data {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(6, &self.labels, os)?;
+        ::protobuf::rt::write_map_with_cached_sizes::<::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(6, &self.labels, os)?;
         if self.content_slice_index != 0 {
             os.write_int64(7, self.content_slice_index)?;
         }
@@ -899,7 +899,7 @@ impl ::protobuf::Message for packet_data {
                 |m: &packet_data| { &m.options },
                 |m: &mut packet_data| { &mut m.options },
             ));
-            fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeMessage<super::libatbus_options::any_value>>(
+            fields.push(::protobuf::reflect::accessor::make_map_accessor::<_, ::protobuf::types::ProtobufTypeString, ::protobuf::types::ProtobufTypeString>(
                 "labels",
                 |m: &packet_data| { &m.labels },
                 |m: &mut packet_data| { &mut m.labels },
@@ -1816,42 +1816,41 @@ impl ::protobuf::reflect::ProtobufValue for ATBUS_PACKET_FLAG_TYPE {
 
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x17libatbus_protocol.proto\x12\x0eatbus.protocol\x1a\x16libatbus_opti\
-    ons.proto\"\x9b\x02\n\x0ccommand_data\x12\x1a\n\x08sequence\x18\x01\x20\
+    ons.proto\"\x80\x02\n\x0ccommand_data\x12\x1a\n\x08sequence\x18\x01\x20\
     \x01(\x03R\x08sequence\x12\x1c\n\targuments\x18\x02\x20\x03(\x0cR\targum\
     ents\x129\n\x07options\x18\x03\x20\x01(\x0b2\x1f.atbus.protocol.command_\
     optionsR\x07options\x12@\n\x06labels\x18\x04\x20\x03(\x0b2(.atbus.protoc\
-    ol.command_data.LabelsEntryR\x06labels\x1aT\n\x0bLabelsEntry\x12\x10\n\
-    \x03key\x18\x01\x20\x01(\tR\x03key\x12/\n\x05value\x18\x02\x20\x01(\x0b2\
-    \x19.atbus.protocol.any_valueR\x05value:\x028\x01\"E\n\tping_data\x12\
-    \x1a\n\x08sequence\x18\x01\x20\x01(\x03R\x08sequence\x12\x1c\n\ttimepoin\
-    t\x18\x02\x20\x01(\x03R\ttimepoint\"\xf8\x03\n\x0bpacket_data\x12'\n\x0f\
-    packet_sequence\x18\x01\x20\x01(\x03R\x0epacketSequence\x12-\n\x12packet\
-    _acknowledge\x18\x02\x20\x01(\x03R\x11packetAcknowledge\x12\x18\n\x07con\
-    tent\x18\x03\x20\x01(\x0cR\x07content\x12\x14\n\x05flags\x18\x04\x20\x01\
-    (\x05R\x05flags\x128\n\x07options\x18\x05\x20\x01(\x0b2\x1e.atbus.protoc\
-    ol.packet_optionsR\x07options\x12?\n\x06labels\x18\x06\x20\x03(\x0b2'.at\
-    bus.protocol.packet_data.LabelsEntryR\x06labels\x12.\n\x13content_slice_\
-    index\x18\x07\x20\x01(\x03R\x11contentSliceIndex\x12.\n\x13content_slice\
-    _count\x18\x08\x20\x01(\x03R\x11contentSliceCount\x120\n\x14content_slic\
-    e_length\x18\t\x20\x01(\x03R\x12contentSliceLength\x1aT\n\x0bLabelsEntry\
-    \x12\x10\n\x03key\x18\x01\x20\x01(\tR\x03key\x12/\n\x05value\x18\x02\x20\
-    \x01(\x0b2\x19.atbus.protocol.any_valueR\x05value:\x028\x01\"b\n\x0cmess\
-    age_head\x12\x18\n\x07version\x18\x01\x20\x01(\x05R\x07version\x12\x16\n\
-    \x06source\x18\x02\x20\x01(\x0cR\x06source\x12\x20\n\x0bdestination\x18\
-    \x03\x20\x01(\x0cR\x0bdestination\"\xa8\x02\n\x07message\x120\n\x04head\
-    \x18\x01\x20\x01(\x0b2\x1c.atbus.protocol.message_headR\x04head\x128\n\t\
-    node_ping\x18\x0b\x20\x01(\x0b2\x19.atbus.protocol.ping_dataH\0R\x08node\
-    Ping\x128\n\tnode_pong\x18\x0c\x20\x01(\x0b2\x19.atbus.protocol.ping_dat\
-    aH\0R\x08nodePong\x128\n\x07command\x18\r\x20\x01(\x0b2\x1c.atbus.protoc\
-    ol.command_dataH\0R\x07command\x125\n\x06packet\x18\x0e\x20\x01(\x0b2\
-    \x1b.atbus.protocol.packet_dataH\0R\x06packetB\x06\n\x04body*\xa0\x01\n\
-    \x14ATBUS_PROTOCOL_CONST\x12\x20\n\x1cATBUS_PROTOCOL_CONST_UNKNOWN\x10\0\
-    \x12\"\n\x1bATBUS_PROTOCOL_MAGIC_NUMBER\x10\x93\x83\x80\x08\x12\x1a\n\
-    \x16ATBUS_PROTOCOL_VERSION\x10\x03\x12\"\n\x1eATBUS_PROTOCOL_MINIMAL_VER\
-    SION\x10\x03\x1a\x02\x10\x01*\x84\x01\n\x16ATBUS_PACKET_FLAG_TYPE\x12\
-    \x1a\n\x16ATBUS_PACKET_FLAG_NONE\x10\0\x12$\n\x20ATBUS_PACKET_FLAG_RESET\
-    _SEQUENCE\x10\x01\x12(\n$ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE\x10\x02B\
-    \x05H\x01\xf8\x01\x01b\x06proto3\
+    ol.command_data.LabelsEntryR\x06labels\x1a9\n\x0bLabelsEntry\x12\x10\n\
+    \x03key\x18\x01\x20\x01(\tR\x03key\x12\x14\n\x05value\x18\x02\x20\x01(\t\
+    R\x05value:\x028\x01\"E\n\tping_data\x12\x1a\n\x08sequence\x18\x01\x20\
+    \x01(\x03R\x08sequence\x12\x1c\n\ttimepoint\x18\x02\x20\x01(\x03R\ttimep\
+    oint\"\xdd\x03\n\x0bpacket_data\x12'\n\x0fpacket_sequence\x18\x01\x20\
+    \x01(\x03R\x0epacketSequence\x12-\n\x12packet_acknowledge\x18\x02\x20\
+    \x01(\x03R\x11packetAcknowledge\x12\x18\n\x07content\x18\x03\x20\x01(\
+    \x0cR\x07content\x12\x14\n\x05flags\x18\x04\x20\x01(\x05R\x05flags\x128\
+    \n\x07options\x18\x05\x20\x01(\x0b2\x1e.atbus.protocol.packet_optionsR\
+    \x07options\x12?\n\x06labels\x18\x06\x20\x03(\x0b2'.atbus.protocol.packe\
+    t_data.LabelsEntryR\x06labels\x12.\n\x13content_slice_index\x18\x07\x20\
+    \x01(\x03R\x11contentSliceIndex\x12.\n\x13content_slice_count\x18\x08\
+    \x20\x01(\x03R\x11contentSliceCount\x120\n\x14content_slice_length\x18\t\
+    \x20\x01(\x03R\x12contentSliceLength\x1a9\n\x0bLabelsEntry\x12\x10\n\x03\
+    key\x18\x01\x20\x01(\tR\x03key\x12\x14\n\x05value\x18\x02\x20\x01(\tR\
+    \x05value:\x028\x01\"b\n\x0cmessage_head\x12\x18\n\x07version\x18\x01\
+    \x20\x01(\x05R\x07version\x12\x16\n\x06source\x18\x02\x20\x01(\x0cR\x06s\
+    ource\x12\x20\n\x0bdestination\x18\x03\x20\x01(\x0cR\x0bdestination\"\
+    \xa8\x02\n\x07message\x120\n\x04head\x18\x01\x20\x01(\x0b2\x1c.atbus.pro\
+    tocol.message_headR\x04head\x128\n\tnode_ping\x18\x0b\x20\x01(\x0b2\x19.\
+    atbus.protocol.ping_dataH\0R\x08nodePing\x128\n\tnode_pong\x18\x0c\x20\
+    \x01(\x0b2\x19.atbus.protocol.ping_dataH\0R\x08nodePong\x128\n\x07comman\
+    d\x18\r\x20\x01(\x0b2\x1c.atbus.protocol.command_dataH\0R\x07command\x12\
+    5\n\x06packet\x18\x0e\x20\x01(\x0b2\x1b.atbus.protocol.packet_dataH\0R\
+    \x06packetB\x06\n\x04body*\xa0\x01\n\x14ATBUS_PROTOCOL_CONST\x12\x20\n\
+    \x1cATBUS_PROTOCOL_CONST_UNKNOWN\x10\0\x12\"\n\x1bATBUS_PROTOCOL_MAGIC_N\
+    UMBER\x10\x93\x83\x80\x08\x12\x1a\n\x16ATBUS_PROTOCOL_VERSION\x10\x03\
+    \x12\"\n\x1eATBUS_PROTOCOL_MINIMAL_VERSION\x10\x03\x1a\x02\x10\x01*\x84\
+    \x01\n\x16ATBUS_PACKET_FLAG_TYPE\x12\x1a\n\x16ATBUS_PACKET_FLAG_NONE\x10\
+    \0\x12$\n\x20ATBUS_PACKET_FLAG_RESET_SEQUENCE\x10\x01\x12(\n$ATBUS_PACKE\
+    T_FLAG_ROUTER_UNREACHABLE\x10\x02B\x05H\x01\xf8\x01\x01b\x06proto3\
 ";
 
 static file_descriptor_proto_lazy: ::protobuf::rt::LazyV2<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::rt::LazyV2::INIT;

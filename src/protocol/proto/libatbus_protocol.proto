@@ -32,10 +32,12 @@ enum ATBUS_PACKET_FLAG_TYPE {
 }
 
 message command_data {
-  int64                  sequence  = 1;
-  repeated bytes         arguments = 2;
-  command_options        options   = 3;
-  map<string, any_value> labels    = 4; // allow custom labels
+  int64           sequence  = 1;
+  repeated bytes  arguments = 2;
+  command_options options   = 3;
+  // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+  // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
+  map<string, string> labels = 4; // allow custom labels
 }
 
 message ping_data {
@@ -44,15 +46,17 @@ message ping_data {
 }
 
 message packet_data {
-  int64                  packet_sequence      = 1;
-  int64                  packet_acknowledge   = 2;
-  bytes                  content              = 3;
-  int32                  flags                = 4;
-  packet_options         options              = 5;
-  map<string, any_value> labels               = 6; // allow custom labels
-  int64                  content_slice_index  = 7; // only greater than 0 when packet is splited into multiple frame
-  int64                  content_slice_count  = 8; // only greater than 0 when packet is splited into multiple frame
-  int64                  content_slice_length = 9; // only greater than 0 when packet is splited into multiple frame
+  int64          packet_sequence    = 1;
+  int64          packet_acknowledge = 2;
+  bytes          content            = 3;
+  int32          flags              = 4;
+  packet_options options            = 5;
+  // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+  // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
+  map<string, string> labels               = 6; // allow custom labels
+  int64               content_slice_index  = 7; // only greater than 0 when packet is splited into multiple frame
+  int64               content_slice_count  = 8; // only greater than 0 when packet is splited into multiple frame
+  int64               content_slice_length = 9; // only greater than 0 when packet is splited into multiple frame
 }
 
 message message_head {
