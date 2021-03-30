@@ -17,3 +17,137 @@ message packet_options {
   // allow extension
   extensions 2000 to max;
 }
+
+
+// =================== These codes below are helper protocols to standardize RPC and tracing frame.
+// any_value,array_value and key_value_list are just like in opentelemetry.
+// @see https://github.com/open-telemetry/opentelemetry-proto/blob/master/opentelemetry/proto/trace/v1/trace.proto
+// @see https://opentelemetry.io
+// @see https://opentracing.io/specification/
+//
+message any_value {
+  oneof value {
+    string         string_value = 1;
+    bool           bool_value   = 2;
+    int64          int_value    = 3;
+    double         double_value = 4;
+    array_value    array_value  = 5;
+    key_value_list kvlist_value = 6;
+  }
+}
+
+message array_value { repeated any_value values = 1; }
+
+message key_value_list { map<string, any_value> values = 1; }
+
+
+message rpc_request {
+  optional string version    = 1;
+  optional int64  request_id = 2;
+
+  optional bytes caller = 11;
+  optional bytes callee = 12;
+
+  optional string rpc_name = 21; // RPC full name, maybe: [DOMAIN/]<ServiceFullName>.<MethodName>
+  optional string type_url = 22; // Maybe: [DOMAIN/]<MessageFullName>, consider type_url in google.protobuf.Any.type_url
+
+  map<string, bytes>     labels = 31;
+  map<string, any_value> tags   = 32;
+}
+
+message rpc_response {
+  optional string version    = 1;
+  optional int64  request_id = 2;
+
+  optional int32 response_code    = 11; // Optional response code
+  optional bytes response_message = 12; // Optional response message
+
+  optional string rpc_name = 21; // RPC full name, maybe: [DOMAIN/]<ServiceFullName>.<MethodName>
+  optional string type_url = 22; // Maybe: [DOMAIN/]<MessageFullName>, consider type_url in google.protobuf.Any.type_url
+
+  map<string, bytes>     labels = 31;
+  map<string, any_value> tags   = 32;
+}
+
+message rpc_stream {
+  optional string version    = 1;
+  optional int64  request_id = 2;
+
+  optional string caller = 11;
+  optional string callee = 12;
+
+  optional string rpc_name = 21; // RPC full name, maybe: [DOMAIN/]<ServiceFullName>.<MethodName>
+  optional string type_url = 22; // Maybe: [DOMAIN/]<MessageFullName>, consider type_url in google.protobuf.Any.type_url
+
+  map<string, bytes>     labels = 31;
+  map<string, any_value> tags   = 32;
+}
+
+message rpc_trace_span {
+  // A unique identifier for a trace. All spans from the same trace share
+  // the same `trace_id`. The ID is a 16-byte array. An ID with all zeroes
+  // is considered invalid.
+  //
+  // This field is semantically required. Receiver should generate new
+  // random trace_id if empty or invalid trace_id was received.
+  //
+  // This field is required.
+  // @see https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto
+  // @see https://www.w3.org/TR/trace-context/#trace-id
+  optional bytes trace_id = 1;
+
+  // A unique identifier for a span within a trace, assigned when the span
+  // is created. The ID is an 8-byte array. An ID with all zeroes is considered
+  // invalid.
+  //
+  // This field is semantically required. Receiver should generate new
+  // random span_id if empty or invalid span_id was received.
+  //
+  // This field is required.
+  // @see https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto
+  // @see https://www.w3.org/TR/trace-context/#parent-id
+  optional bytes span_id = 2;
+
+  // trace_state conveys information about request position in multiple distributed tracing graphs.
+  // It is a trace_state in w3c-trace-context format: https://www.w3.org/TR/trace-context/#tracestate-header
+  // See also https://github.com/w3c/distributed-tracing for more details about this field.
+  optional string trace_state = 3;
+
+  // The `span_id` of this span's parent span. If this is a root span, then this
+  // field must be empty. The ID is an 8-byte array.
+  // @see https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto
+  // @see https://www.w3.org/TR/trace-context/#parent-id
+  optional bytes parent_span_id = 4;
+
+  // Refer to [rpc_request|rpc_response|rpc_stream].rpc_name
+  // string name      = 5;
+
+  // start_time_unix_nano is the start time of the span. On the client side, this is the time
+  // kept by the local machine where the span execution starts. On the server side, this
+  // is the time when the server's application handler starts running.
+  // Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970.
+  //
+  // This field is semantically required and it is expected that end_time >= start_time.
+  optional fixed64 start_time_unix_nano = 6;
+
+  // end_time_unix_nano is the end time of the span. On the client side, this is the time
+  // kept by the local machine where the span execution ends. On the server side, this
+  // is the time when the server application handler stops running.
+  // Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970.
+  //
+  // This field is semantically required and it is expected that end_time >= start_time.
+  optional fixed64 end_time_unix_nano = 7;
+
+  map<string, bytes>     labels     = 8;
+  map<string, any_value> attributes = 9;
+}
+
+message rpc_frame {
+  oneof frame_type {
+    rpc_request  request  = 1;
+    rpc_response response = 2;
+    rpc_stream   stream   = 3;
+  }
+
+  optional rpc_trace_span trace_span = 11;
+}
