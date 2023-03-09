@@ -1,6 +1,6 @@
 extern crate bytes;
 extern crate murmur3;
-extern crate protobuf;
+extern crate prost;
 extern crate rand;
 // extern crate quote;
 // extern crate syn;
@@ -13,5 +13,5 @@ pub mod encoder;
 pub mod error;
 pub mod proto;
 
-pub type FrameMessage = proto::libatbus_protocol::message;
+pub type FrameMessage = proto::atbus::protocol::FrameMessage;
 pub type BoxedFrameMessage = Box<FrameMessage>;

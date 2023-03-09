@@ -1,5 +1,5 @@
 [package]
-name = "libatbus-protocol"
+name = "libatbus-protoc-bin"
 version = "0.1.0"
 authors = ["owent <admin@owent.net>"]
 license = "MIT OR Apache-2.0"
@@ -20,14 +20,9 @@ bench = false # It's nightly now
 harness = true
 
 [dependencies]
-# syn = { version = "1" }
-# quote = { version = "1" }
-prost = { version = "0.*" }
-prost-types = "0.11"
-bytes = { version = "1" }
-murmur3 = "0.*"
-rand = "0.*"
-
-[build-dependencies]
-libatbus-protoc-bin = { path = "../../tools/protoc-bin" }
+log         = "0.*"
+env_logger  = "0.*"
 prost-build = { version = "0.*" }
+reqwest = { version = "0.*", features = ["blocking"] }
+zip = { version = "0.*" }
+

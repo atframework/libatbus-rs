@@ -3,4 +3,5 @@ members = [
     "src/protocol",
     "src/node",
     "src/binding/c",
+    "tools/protoc-bin",
 ]

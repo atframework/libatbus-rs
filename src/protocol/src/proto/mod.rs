@@ -1,3 +1,5 @@
-
-pub mod libatbus_options;
-pub mod libatbus_protocol;
+pub mod atbus {
+    pub mod protocol {
+        include!("atbus.protocol.rs");
+    }
+}

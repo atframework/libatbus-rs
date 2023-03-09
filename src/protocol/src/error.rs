@@ -1,10 +1,11 @@
 //! libatbus-protocol error type
 
-use protobuf::error::ProtobufError;
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::str;
+
+use prost::{DecodeError, EncodeError};
 
 #[derive(Debug)]
 pub enum ProtocolError {
@@ -23,9 +24,9 @@ pub enum ProtocolError {
     /// Need pick packet before write more data
     HasPendingPacket,
     /// Decode failed
-    DecodeFailed(ProtobufError),
+    DecodeFailed(DecodeError),
     /// Encode failed
-    EncodeFailed(ProtobufError),
+    EncodeFailed(EncodeError),
 }
 
 pub type ProtocolResult<T> = Result<T, ProtocolError>;

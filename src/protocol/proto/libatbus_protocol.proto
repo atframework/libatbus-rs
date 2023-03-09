@@ -11,66 +11,103 @@ option optimize_for = SPEED;
 option cc_enable_arenas = true;
 
 enum ATBUS_PROTOCOL_CONST {
-  option allow_alias             = true;
-  ATBUS_PROTOCOL_CONST_UNKNOWN   = 0;
-  ATBUS_PROTOCOL_MAGIC_NUMBER    = 16777619; // 0x1000193
-  ATBUS_PROTOCOL_VERSION         = 3;
-  ATBUS_PROTOCOL_MINIMAL_VERSION = 3; // minimal protocol version supported
+  option allow_alias                   = true;
+  ATBUS_PROTOCOL_CONST_UNKNOWN         = 0;
+  ATBUS_PROTOCOL_CONST_MAGIC_NUMBER    = 16777619; // 0x1000193
+  ATBUS_PROTOCOL_CONST_VERSION         = 3;
+  ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3; // minimal protocol version supported
+
+  // Internal packet type, user custom type should be greater than this.
+  ATBUS_PROTOCOL_CONST_INTERNAL_PACKET_TYPE = 1000;
 }
 
 enum ATBUS_PACKET_FLAG_TYPE {
-  ATBUS_PACKET_FLAG_NONE = 0; // default value
+  AATBUS_PACKET_FLAG_TYPE_NONE = 0; // default value
+
+  // This is not the last frame of current packet.
+  // When this flag is set, we need wait for more frame to finish this packet
+  ATBUS_PACKET_FLAG_TYPE_PACKET_CONTINUATION = 1;
+
+  // Finish current stream, similar to FIN of TCP
+  // Receiver should destroy this stream when got this flag
+  ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM = 2;
+
+  // Finish current connection, similar to FIN of TCP
+  // Receiver should destroy this connection when got this flag
+  ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION = 4;
 
   // Reset sequence.
   // When endpoints are first created or receive a packet_data with acknowledge lower than the first message in queue
   // We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_SEQUENCE
-  ATBUS_PACKET_FLAG_RESET_SEQUENCE = 1;
-  // Router unreachable.
-  // It may be send by proxy and tell the caller, we can not find next endpoint to send a packet and will drop it
-  // When ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE is set, packet_acknowledge will be the last packet received and lost
-  ATBUS_PACKET_FLAG_ROUTER_UNREACHABLE = 2;
+  ATBUS_PACKET_FLAG_TYPE_RESET_SEQUENCE = 8;
 }
 
-message command_data {
-  int64           sequence  = 1;
-  repeated bytes  arguments = 2;
-  command_options options   = 3;
-  // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
-  // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
-  map<string, string> labels = 4; // allow custom labels
+enum ATBUS_PACKET_TYPE {
+  ATBUS_PACKET_TYPE_DATA    = 0;
+  ATBUS_PACKET_TYPE_COMMAND = 1;
 }
 
 message ping_data {
-  int64 sequence  = 1;
-  int64 timepoint = 2;
+  int64 acknowledge_sequence = 1; // last recieved packet sequence
+  int64 timepoint_seconds    = 3;
+  int32 timepoint_nanos      = 4;
+}
+
+message forward_data {
+  int32 version       = 1;
+  bytes source        = 2;
+  bytes scheme        = 3;
+  bytes address       = 4;
+  int32 port          = 5;
+  int64 connection_id = 6;
 }
 
 message packet_data {
-  int64          packet_sequence    = 1;
-  int64          packet_acknowledge = 2;
-  bytes          content            = 3;
-  int32          flags              = 4;
-  packet_options options            = 5;
+  // Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
+  // We can transfer different stream on different connection to improve throughput
+  int64 stream_id     = 1;
+  int64 stream_offset = 2;
+  bytes content       = 3;
+  int32 packet_type   = 4; // @see ATBUS_INTERNAL_PACKET_TYPE
+  // packet_sequence is used to improve performance when mix datas from multiple connections.
+  int64 packet_sequence = 5;
+  // When flags contains ATBUS_PACKET_FLAG_PACKET_CONTINUATION, packet_length should be set.
+  int64 packet_length = 6;
+  // @see ATBUS_PACKET_FLAG_TYPE
+  int32          flags   = 7;
+  packet_options options = 8;
   // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
   // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
-  map<string, string> labels               = 6; // allow custom labels
-  int64               content_slice_index  = 7; // only greater than 0 when packet is splited into multiple frame
-  int64               content_slice_count  = 8; // only greater than 0 when packet is splited into multiple frame
-  int64               content_slice_length = 9; // only greater than 0 when packet is splited into multiple frame
+  map<string, string> labels = 9; // allow custom labels
+
+  // This field should exists when first create a relay connection
+  forward_data forward_for = 11;
+}
+
+message acknowledge_data {
+  int64 acknowledge_sequence = 1; // last recieved packet sequence
+  int64 timepoint_seconds    = 3;
+  int32 timepoint_nanos      = 4;
+
+  // Tell relaysvr to acknowledge forward connection,so relaysvr will not fill packet_data.forward_for
+  // for this connection any more.
+  forward_data forward_for = 11;
 }
 
 message message_head {
-  int32 version     = 1;
-  bytes source      = 2;
-  bytes destination = 3;
+  int32 version                   = 1;
+  bytes source                    = 2;
+  bytes destination               = 3;
+  bytes forward_for_source        = 4; // Always filled by relaysvr
+  int64 forward_for_connection_id = 5; // Always filled by relaysvr
 }
 
-message message {
+message frame_message {
   message_head head = 1;
   oneof        body {
-    ping_data    node_ping = 11;
-    ping_data    node_pong = 12;
-    command_data command   = 13;
-    packet_data  packet    = 14;
+    ping_data        node_ping   = 11;
+    ping_data        node_pong   = 12;
+    packet_data      packet      = 13;
+    acknowledge_data acknowledge = 14;
   }
 }

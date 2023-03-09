@@ -5,7 +5,7 @@ use super::frame_block;
 use super::FrameMessage;
 
 use bytes;
-use protobuf::{CodedOutputStream, Message};
+use prost::Message;
 
 pub struct EncoderFrame<'a> {
     message: &'a FrameMessage,
@@ -15,12 +15,12 @@ pub struct EncoderFrame<'a> {
 
 impl<'a> EncoderFrame<'a> {
     pub fn new(msg: &'a FrameMessage) -> EncoderFrame<'a> {
-        let message_length = msg.compute_size();
+        let message_length = msg.encoded_len();
         EncoderFrame {
             message: msg,
-            message_length: message_length as usize,
+            message_length: message_length,
             varint_length: frame_block::FrameBlockAlgorithm::compute_frame_length_consume(
-                message_length,
+                message_length as u64,
             ),
         }
     }
@@ -79,11 +79,9 @@ impl Encoder {
             }
         }
 
-        match input
-            .get_message()
-            .write_to_with_cached_sizes(&mut CodedOutputStream::bytes(
-                &mut output[input.varint_length..input.varint_length + input.get_message_length()],
-            )) {
+        let mut output_message =
+            &mut output[input.varint_length..input.varint_length + input.get_message_length()];
+        match input.get_message().encode(&mut output_message) {
             Ok(_) => {}
             Err(e) => {
                 return Err(ProtocolError::EncodeFailed(e));

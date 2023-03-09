@@ -1,7 +1,7 @@
 //! libatbus-protocol decoder
 
 use bytes::{Buf, BufMut, BytesMut};
-use protobuf::Message;
+use prost::Message;
 use std::cmp::min;
 use std::io;
 
@@ -380,13 +380,12 @@ impl Decoder {
     fn decode_message<T: AsRef<[u8]>>(
         block: frame_block::FrameBlock<T>,
     ) -> ProtocolResult<BoxedFrameMessage> {
-        if !block.validate() {
-            return Err(ProtocolError::IoError(io::ErrorKind::InvalidData.into()));
-        }
-
-        match FrameMessage::parse_from_bytes(&block.data().unwrap()) {
-            Ok(msg) => Ok(Box::new(msg)),
-            Err(e) => Err(ProtocolError::DecodeFailed(e)),
+        match block.data() {
+            Some(block_data) => match FrameMessage::decode_length_delimited(block_data) {
+                Ok(msg) => Ok(Box::new(msg)),
+                Err(e) => Err(ProtocolError::DecodeFailed(e)),
+            },
+            None => Err(ProtocolError::IoError(io::ErrorKind::InvalidData.into())),
         }
     }
 }
@@ -395,10 +394,11 @@ impl Decoder {
 mod test {
     use bytes::Buf;
     use rand::{thread_rng, Rng};
+    use std::collections::HashMap;
 
     use super::super::encoder::{Encoder, EncoderFrame};
     use super::super::error::ProtocolError;
-    use super::super::proto::libatbus_protocol;
+    use super::super::proto;
     use super::frame_block;
     use super::Decoder;
     use super::FrameMessage;
@@ -437,34 +437,59 @@ mod test {
     }
 
     fn generate_packet_message(content_length: usize) -> FrameMessage {
-        let mut ret = FrameMessage::new();
-        ret.mut_head().set_source(generate_uuid());
-        ret.mut_head().set_destination(generate_uuid());
-        ret.mut_head()
-            .set_version(libatbus_protocol::ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_VERSION as i32);
+        let head = proto::atbus::protocol::MessageHead {
+            version: proto::atbus::protocol::AtbusProtocolConst::Version as i32,
+            source: generate_uuid(),
+            destination: generate_uuid(),
+            forward_for_source: vec![],
+            forward_for_connection_id: 1,
+        };
+        let mut body = proto::atbus::protocol::PacketData {
+            stream_id: 1,
+            stream_offset: 0,
+            content: vec![b'0'; content_length],
+            packet_type: proto::atbus::protocol::AtbusPacketType::Data as i32,
+            packet_sequence: 123,
+            packet_length: 0,
+            flags: proto::atbus::protocol::AtbusPacketFlagType::ResetSequence as i32,
+            options: None,
+            labels: HashMap::new(),
+            forward_for: None,
+        };
+        thread_rng().fill(body.content.as_mut_slice());
 
-        let body = ret.mut_packet();
-        body.set_packet_sequence(123);
-        body.set_packet_acknowledge(456);
-        body.set_flags(
-            libatbus_protocol::ATBUS_PACKET_FLAG_TYPE::ATBUS_PACKET_FLAG_RESET_SEQUENCE as i32,
-        );
-        body.mut_content().resize(content_length, 0);
-        thread_rng().fill(body.mut_content().as_mut_slice());
+        let ret = FrameMessage {
+            head: Some(head),
+            body: Some(proto::atbus::protocol::frame_message::Body::Packet(body)),
+        };
 
         ret
     }
 
+    fn expect_option<T>(left: &Option<T>, right: &Option<T>) -> bool {
+        assert_eq!(left.is_some(), right.is_some());
+        left.is_some() && right.is_some()
+    }
+
+    fn expect_msg_head_eq(
+        left: &proto::atbus::protocol::MessageHead,
+        right: &proto::atbus::protocol::MessageHead,
+    ) {
+        assert_eq!(left.source, right.source);
+        assert_eq!(left.destination, right.destination);
+        assert_eq!(left.version, right.version);
+        assert_eq!(left.forward_for_source, right.forward_for_source);
+        assert_eq!(
+            left.forward_for_connection_id,
+            right.forward_for_connection_id
+        );
+    }
+
     fn expect_msg_eq(left: &FrameMessage, right: &FrameMessage) {
-        assert_eq!(left.get_head().get_source(), right.get_head().get_source());
-        assert_eq!(
-            left.get_head().get_destination(),
-            right.get_head().get_destination()
-        );
-        assert_eq!(
-            left.get_head().get_version(),
-            right.get_head().get_version()
-        );
+        if (expect_option(&left.head, &right.head)) {
+            expect_msg_head_eq(left.head.as_ref().unwrap(), right.head.as_ref().unwrap());
+        }
+
         assert_eq!(left.body, right.body);
     }
 

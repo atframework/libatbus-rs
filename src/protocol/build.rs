@@ -1,38 +1,21 @@
-use std::fs;
-
-extern crate env_logger;
-extern crate log;
-
-extern crate protoc_bin_vendored;
-extern crate protoc_rust;
-
-fn codegen() -> protoc_rust::Codegen {
-    let mut codegen = protoc_rust::Codegen::new();
-    codegen
-        .protoc_path(protoc_bin_vendored::protoc_bin_path().unwrap())
-        .out_dir("src/proto")
-        .inputs(&[
-            "proto/libatbus_options.proto",
-            "proto/libatbus_protocol.proto",
-        ])
-        .include("proto");
-
-    codegen
-}
+use std::env;
+use libatbus_protoc_bin;
 
 fn main() {
-    env_logger::init();
+    let (mut codegen, protobuf_include_dir) = libatbus_protoc_bin::codegen();
 
-    codegen().run().expect("protoc");
-    fs::write(
-        "src/proto/mod.rs",
-        "
-pub mod libatbus_options;
-pub mod libatbus_protocol;
-",
-    )
-    .unwrap();
+    let output_dir = env::current_dir().unwrap().join("src").join("proto");
+    let _ = codegen
+        // .btree_map([".atbus.protocol"])
+        .out_dir(output_dir)
+        .compile_protos(
+            &[
+                "proto/libatbus_options.proto",
+                "proto/libatbus_protocol.proto",
+            ],
+            &["proto", &protobuf_include_dir]).unwrap();
 
     println!("cargo:rerun-if-changed=proto/libatbus_options.proto");
     println!("cargo:rerun-if-changed=proto/libatbus_protocol.proto");
+    println!("cargo:rerun-if-changed=proto/build.rs");
 }
