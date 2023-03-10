@@ -1,3 +1,6 @@
+// Copyright 2023 atframework
+// Licensed under the MIT licenses.
+
 //! libatbus-protocol decoder
 
 use bytes::{Buf, BufMut, BytesMut};
@@ -449,7 +452,6 @@ mod test {
             stream_offset: 0,
             content: vec![b'0'; content_length],
             packet_type: proto::atbus::protocol::AtbusPacketType::Data as i32,
-            packet_sequence: 123,
             packet_length: 0,
             flags: proto::atbus::protocol::AtbusPacketFlagType::ResetSequence as i32,
             options: None,

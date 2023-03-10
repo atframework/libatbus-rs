@@ -1,3 +1,6 @@
+// Copyright 2023 atframework
+// Licensed under the MIT licenses.
+
 extern crate bytes;
 extern crate murmur3;
 extern crate prost;
@@ -15,3 +18,8 @@ pub mod proto;
 
 pub type FrameMessage = proto::atbus::protocol::FrameMessage;
 pub type BoxedFrameMessage = Box<FrameMessage>;
+
+pub type PingMessage = proto::atbus::protocol::PingData;
+pub type ForwardMessage = proto::atbus::protocol::ForwardData;
+pub type StreamAcknowledgeMessage = proto::atbus::protocol::StreamAcknowledge;
+pub type PacketMessage = proto::atbus::protocol::PacketData;

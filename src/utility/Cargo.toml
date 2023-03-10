@@ -1,5 +1,5 @@
 [package]
-name = "libatbus-node"
+name = "libatbus-utility"
 version = "0.1.0"
 authors = ["owent <admin@owent.net>"]
 edition = "2021"
@@ -7,4 +7,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libatbus-utility = { path = "../utility" }
+quote = { version = "1" }
+bytes = { version = "1" }
+uuid = { version = "1", features = ["v4", "fast-rng"] }
+lazy_static = "1"
+# libatbus-protocol = { path = "protocol" }

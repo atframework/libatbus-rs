@@ -1,6 +1,6 @@
 # libatbus-rs
-下一代libatbus通信层中间件
 
+下一代libatbus通信层中间件
 
 ## cargo 配置
 

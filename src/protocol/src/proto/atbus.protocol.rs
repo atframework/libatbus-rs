@@ -212,10 +212,18 @@ pub mod rpc_frame {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PingData {
-    /// last recieved packet sequence
+pub struct StreamAcknowledge {
     #[prost(int64, tag = "1")]
-    pub acknowledge_sequence: i64,
+    pub stream_id: i64,
+    /// All datas before this offest are received.(Not include)
+    #[prost(int64, tag = "2")]
+    pub acknowledge_offset: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PingData {
+    #[prost(message, repeated, tag = "1")]
+    pub acknowledge: ::prost::alloc::vec::Vec<StreamAcknowledge>,
     #[prost(int64, tag = "3")]
     pub timepoint_seconds: i64,
     #[prost(int32, tag = "4")]
@@ -251,22 +259,19 @@ pub struct PacketData {
     /// @see ATBUS_INTERNAL_PACKET_TYPE
     #[prost(int32, tag = "4")]
     pub packet_type: i32,
-    /// packet_sequence is used to improve performance when mix datas from multiple connections.
-    #[prost(int64, tag = "5")]
-    pub packet_sequence: i64,
     /// When flags contains ATBUS_PACKET_FLAG_PACKET_CONTINUATION, packet_length should be set.
-    #[prost(int64, tag = "6")]
+    #[prost(int64, tag = "5")]
     pub packet_length: i64,
     /// @see ATBUS_PACKET_FLAG_TYPE
-    #[prost(int32, tag = "7")]
+    #[prost(int32, tag = "6")]
     pub flags: i32,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag = "7")]
     pub options: ::core::option::Option<PacketOptions>,
     /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
     /// <https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto>
     ///
     /// allow custom labels
-    #[prost(map = "string, string", tag = "9")]
+    #[prost(map = "string, string", tag = "8")]
     pub labels: ::std::collections::HashMap<
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
@@ -278,9 +283,8 @@ pub struct PacketData {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AcknowledgeData {
-    /// last recieved packet sequence
-    #[prost(int64, tag = "1")]
-    pub acknowledge_sequence: i64,
+    #[prost(message, optional, tag = "1")]
+    pub acknowledge: ::core::option::Option<StreamAcknowledge>,
     #[prost(int64, tag = "3")]
     pub timepoint_seconds: i64,
     #[prost(int32, tag = "4")]

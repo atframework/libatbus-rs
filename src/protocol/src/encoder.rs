@@ -1,3 +1,6 @@
+// Copyright 2023 atframework
+// Licensed under the MIT licenses.
+
 use std::convert::From;
 
 use super::error::{ProtocolError, ProtocolResult};

@@ -47,10 +47,18 @@ enum ATBUS_PACKET_TYPE {
   ATBUS_PACKET_TYPE_COMMAND = 1;
 }
 
+message stream_acknowledge {
+  int64 stream_id = 1;
+
+  // All datas before this offest are received.(Not include)
+  int64 acknowledge_offset = 2;
+}
+
 message ping_data {
-  int64 acknowledge_sequence = 1; // last recieved packet sequence
-  int64 timepoint_seconds    = 3;
-  int32 timepoint_nanos      = 4;
+  repeated stream_acknowledge acknowledge = 1;
+
+  int64 timepoint_seconds = 3;
+  int32 timepoint_nanos   = 4;
 }
 
 message forward_data {
@@ -69,25 +77,24 @@ message packet_data {
   int64 stream_offset = 2;
   bytes content       = 3;
   int32 packet_type   = 4; // @see ATBUS_INTERNAL_PACKET_TYPE
-  // packet_sequence is used to improve performance when mix datas from multiple connections.
-  int64 packet_sequence = 5;
   // When flags contains ATBUS_PACKET_FLAG_PACKET_CONTINUATION, packet_length should be set.
-  int64 packet_length = 6;
+  int64 packet_length = 5;
   // @see ATBUS_PACKET_FLAG_TYPE
-  int32          flags   = 7;
-  packet_options options = 8;
+  int32          flags   = 6;
+  packet_options options = 7;
   // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
   // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
-  map<string, string> labels = 9; // allow custom labels
+  map<string, string> labels = 8; // allow custom labels
 
   // This field should exists when first create a relay connection
   forward_data forward_for = 11;
 }
 
 message acknowledge_data {
-  int64 acknowledge_sequence = 1; // last recieved packet sequence
-  int64 timepoint_seconds    = 3;
-  int32 timepoint_nanos      = 4;
+  stream_acknowledge acknowledge = 1;
+
+  int64 timepoint_seconds = 3;
+  int32 timepoint_nanos   = 4;
 
   // Tell relaysvr to acknowledge forward connection,so relaysvr will not fill packet_data.forward_for
   // for this connection any more.
