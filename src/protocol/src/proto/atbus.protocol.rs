@@ -247,6 +247,14 @@ pub struct ForwardData {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CloseReasonData {
+    #[prost(enumeration = "AtbusCloseReason", tag = "1")]
+    pub code: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PacketData {
     /// Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
     /// We can transfer different stream on different connection to improve throughput
@@ -279,6 +287,9 @@ pub struct PacketData {
     /// This field should exists when first create a relay connection
     #[prost(message, optional, tag = "11")]
     pub forward_for: ::core::option::Option<ForwardData>,
+    /// This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set
+    #[prost(message, optional, tag = "12")]
+    pub close_reason: ::core::option::Option<CloseReasonData>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -418,6 +429,37 @@ impl AtbusPacketFlagType {
             "ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM" => Some(Self::FinishStream),
             "ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION" => Some(Self::FinishConnection),
             "ATBUS_PACKET_FLAG_TYPE_RESET_SEQUENCE" => Some(Self::ResetSequence),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AtbusCloseReason {
+    Unknown = 0,
+    /// Shutdown by API
+    Shutdown = 1,
+    /// Lost connection
+    PeerReset = 2,
+}
+impl AtbusCloseReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            AtbusCloseReason::Unknown => "ATBUS_CLOSE_REASON_UNKNOWN",
+            AtbusCloseReason::Shutdown => "ATBUS_CLOSE_REASON_SHUTDOWN",
+            AtbusCloseReason::PeerReset => "ATBUS_CLOSE_REASON_PEER_RESET",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ATBUS_CLOSE_REASON_UNKNOWN" => Some(Self::Unknown),
+            "ATBUS_CLOSE_REASON_SHUTDOWN" => Some(Self::Shutdown),
+            "ATBUS_CLOSE_REASON_PEER_RESET" => Some(Self::PeerReset),
             _ => None,
         }
     }

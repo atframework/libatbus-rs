@@ -42,6 +42,14 @@ enum ATBUS_PACKET_FLAG_TYPE {
   ATBUS_PACKET_FLAG_TYPE_RESET_SEQUENCE = 8;
 }
 
+enum ATBUS_CLOSE_REASON {
+  ATBUS_CLOSE_REASON_UNKNOWN = 0;
+  // Shutdown by API
+  ATBUS_CLOSE_REASON_SHUTDOWN = 1;
+  // Lost connection
+  ATBUS_CLOSE_REASON_PEER_RESET = 2;
+}
+
 enum ATBUS_PACKET_TYPE {
   ATBUS_PACKET_TYPE_DATA    = 0;
   ATBUS_PACKET_TYPE_COMMAND = 1;
@@ -70,6 +78,11 @@ message forward_data {
   int64 connection_id = 6;
 }
 
+message close_reason_data {
+  ATBUS_CLOSE_REASON code    = 1;
+  string             message = 2;
+}
+
 message packet_data {
   // Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
   // We can transfer different stream on different connection to improve throughput
@@ -88,6 +101,8 @@ message packet_data {
 
   // This field should exists when first create a relay connection
   forward_data forward_for = 11;
+  // This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set
+  close_reason_data close_reason = 12;
 }
 
 message acknowledge_data {

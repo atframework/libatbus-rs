@@ -457,6 +457,7 @@ mod test {
             options: None,
             labels: HashMap::new(),
             forward_for: None,
+            close_reason: None,
         };
         thread_rng().fill(body.content.as_mut_slice());
 
@@ -488,7 +489,7 @@ mod test {
     }
 
     fn expect_msg_eq(left: &FrameMessage, right: &FrameMessage) {
-        if (expect_option(&left.head, &right.head)) {
+        if expect_option(&left.head, &right.head) {
             expect_msg_head_eq(left.head.as_ref().unwrap(), right.head.as_ref().unwrap());
         }
 
