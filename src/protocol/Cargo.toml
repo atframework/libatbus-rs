@@ -27,7 +27,9 @@ prost-types = "0.11"
 bytes = { version = "1" }
 murmur3 = "0.*"
 rand = "0.*"
+libatbus-utility = { path = "../utility" }
 
 [build-dependencies]
 libatbus-protoc-bin = { path = "../../tools/protoc-bin" }
 prost-build = { version = "0.*" }
+

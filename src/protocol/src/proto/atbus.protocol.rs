@@ -1,9 +1,10 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CommandOptions {}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PacketOptions {}
+pub struct PacketOptions {
+    /// Used to verify a untrusted endpoint
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
 /// =================== These codes below are helper protocols to standardize RPC and tracing frame.
 /// any_value,array_value and key_value_list are just like in opentelemetry.
 /// @see <https://github.com/open-telemetry/opentelemetry-proto/blob/master/opentelemetry/proto/trace/v1/trace.proto>
@@ -222,8 +223,6 @@ pub struct StreamAcknowledge {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PingData {
-    #[prost(message, repeated, tag = "1")]
-    pub acknowledge: ::prost::alloc::vec::Vec<StreamAcknowledge>,
     #[prost(int64, tag = "3")]
     pub timepoint_seconds: i64,
     #[prost(int32, tag = "4")]
@@ -255,6 +254,36 @@ pub struct CloseReasonData {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PacketContent {
+    /// @see ATBUS_INTERNAL_PACKET_TYPE
+    #[prost(int32, tag = "1")]
+    pub packet_type: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+    /// When has_more is true this is not the last frame of current packet.
+    /// We need wait for more frame to finish this packet.
+    #[prost(bool, tag = "3")]
+    pub has_more: bool,
+    #[prost(message, optional, tag = "4")]
+    pub options: ::core::option::Option<PacketOptions>,
+    /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
+    /// <https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto>
+    ///
+    /// allow custom labels
+    #[prost(map = "string, string", tag = "5")]
+    pub labels: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    /// This field should exists when first create a relay connection.
+    #[prost(message, optional, tag = "6")]
+    pub forward_for: ::core::option::Option<ForwardData>,
+    /// This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set.
+    #[prost(message, optional, tag = "7")]
+    pub close_reason: ::core::option::Option<CloseReasonData>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PacketData {
     /// Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
     /// We can transfer different stream on different connection to improve throughput
@@ -262,34 +291,16 @@ pub struct PacketData {
     pub stream_id: i64,
     #[prost(int64, tag = "2")]
     pub stream_offset: i64,
+    /// content is encoded and crypted repeated packet_content
     #[prost(bytes = "vec", tag = "3")]
     pub content: ::prost::alloc::vec::Vec<u8>,
-    /// @see ATBUS_INTERNAL_PACKET_TYPE
-    #[prost(int32, tag = "4")]
-    pub packet_type: i32,
-    /// When flags contains ATBUS_PACKET_FLAG_PACKET_CONTINUATION, packet_length should be set.
-    #[prost(int64, tag = "5")]
-    pub packet_length: i64,
     /// @see ATBUS_PACKET_FLAG_TYPE
-    #[prost(int32, tag = "6")]
+    #[prost(int32, tag = "4")]
     pub flags: i32,
-    #[prost(message, optional, tag = "7")]
-    pub options: ::core::option::Option<PacketOptions>,
-    /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
-    /// <https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto>
-    ///
-    /// allow custom labels
-    #[prost(map = "string, string", tag = "8")]
-    pub labels: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    /// This field should exists when first create a relay connection
-    #[prost(message, optional, tag = "11")]
-    pub forward_for: ::core::option::Option<ForwardData>,
-    /// This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set
-    #[prost(message, optional, tag = "12")]
-    pub close_reason: ::core::option::Option<CloseReasonData>,
+    /// How many datas we should ingnore for padding.
+    /// It's usually used by the last package of encrypted data.
+    #[prost(int32, tag = "5")]
+    pub padding_size: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -308,17 +319,15 @@ pub struct AcknowledgeData {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageHead {
-    #[prost(int32, tag = "1")]
-    pub version: i32,
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes = "vec", tag = "1")]
     pub source: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
+    #[prost(bytes = "vec", tag = "2")]
     pub destination: ::prost::alloc::vec::Vec<u8>,
     /// Always filled by relaysvr
-    #[prost(bytes = "vec", tag = "4")]
+    #[prost(bytes = "vec", tag = "3")]
     pub forward_for_source: ::prost::alloc::vec::Vec<u8>,
     /// Always filled by relaysvr
-    #[prost(int64, tag = "5")]
+    #[prost(int64, tag = "4")]
     pub forward_for_connection_id: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -326,7 +335,7 @@ pub struct MessageHead {
 pub struct FrameMessage {
     #[prost(message, optional, tag = "1")]
     pub head: ::core::option::Option<MessageHead>,
-    #[prost(oneof = "frame_message::Body", tags = "11, 12, 13, 14")]
+    #[prost(oneof = "frame_message::Body", tags = "5, 6, 7, 8")]
     pub body: ::core::option::Option<frame_message::Body>,
 }
 /// Nested message and enum types in `frame_message`.
@@ -334,13 +343,13 @@ pub mod frame_message {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
-        #[prost(message, tag = "11")]
+        #[prost(message, tag = "5")]
         NodePing(super::PingData),
-        #[prost(message, tag = "12")]
+        #[prost(message, tag = "6")]
         NodePong(super::PingData),
-        #[prost(message, tag = "13")]
+        #[prost(message, tag = "7")]
         Packet(super::PacketData),
-        #[prost(message, tag = "14")]
+        #[prost(message, tag = "8")]
         Acknowledge(super::AcknowledgeData),
     }
 }
@@ -385,19 +394,18 @@ impl AtbusProtocolConst {
 pub enum AtbusPacketFlagType {
     /// default value
     AatbusPacketFlagTypeNone = 0,
-    /// This is not the last frame of current packet.
-    /// When this flag is set, we need wait for more frame to finish this packet
-    PacketContinuation = 1,
     /// Finish current stream, similar to FIN of TCP
     /// Receiver should destroy this stream when got this flag
-    FinishStream = 2,
+    FinishStream = 1,
     /// Finish current connection, similar to FIN of TCP
     /// Receiver should destroy this connection when got this flag
-    FinishConnection = 4,
-    /// Reset sequence.
+    FinishConnection = 2,
+    /// Reset offset and drop datas before offset of this packet.
     /// When endpoints are first created or receive a packet_data with acknowledge lower than the first message in queue
-    /// We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_SEQUENCE
-    ResetSequence = 8,
+    /// We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_OFFSET.
+    /// When any packet is sent partly by this connection and the rest fragments are received by other connections, we also
+    /// will send the first fragmentof next packet with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
+    ResetOffset = 4,
 }
 impl AtbusPacketFlagType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -409,26 +417,20 @@ impl AtbusPacketFlagType {
             AtbusPacketFlagType::AatbusPacketFlagTypeNone => {
                 "AATBUS_PACKET_FLAG_TYPE_NONE"
             }
-            AtbusPacketFlagType::PacketContinuation => {
-                "ATBUS_PACKET_FLAG_TYPE_PACKET_CONTINUATION"
-            }
             AtbusPacketFlagType::FinishStream => "ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM",
             AtbusPacketFlagType::FinishConnection => {
                 "ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION"
             }
-            AtbusPacketFlagType::ResetSequence => "ATBUS_PACKET_FLAG_TYPE_RESET_SEQUENCE",
+            AtbusPacketFlagType::ResetOffset => "ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "AATBUS_PACKET_FLAG_TYPE_NONE" => Some(Self::AatbusPacketFlagTypeNone),
-            "ATBUS_PACKET_FLAG_TYPE_PACKET_CONTINUATION" => {
-                Some(Self::PacketContinuation)
-            }
             "ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM" => Some(Self::FinishStream),
             "ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION" => Some(Self::FinishConnection),
-            "ATBUS_PACKET_FLAG_TYPE_RESET_SEQUENCE" => Some(Self::ResetSequence),
+            "ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET" => Some(Self::ResetOffset),
             _ => None,
         }
     }
@@ -441,6 +443,8 @@ pub enum AtbusCloseReason {
     Shutdown = 1,
     /// Lost connection
     PeerReset = 2,
+    /// Unauthorized
+    Unauthorized = 3,
 }
 impl AtbusCloseReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -452,6 +456,7 @@ impl AtbusCloseReason {
             AtbusCloseReason::Unknown => "ATBUS_CLOSE_REASON_UNKNOWN",
             AtbusCloseReason::Shutdown => "ATBUS_CLOSE_REASON_SHUTDOWN",
             AtbusCloseReason::PeerReset => "ATBUS_CLOSE_REASON_PEER_RESET",
+            AtbusCloseReason::Unauthorized => "ATBUS_CLOSE_REASON_UNAUTHORIZED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -460,6 +465,7 @@ impl AtbusCloseReason {
             "ATBUS_CLOSE_REASON_UNKNOWN" => Some(Self::Unknown),
             "ATBUS_CLOSE_REASON_SHUTDOWN" => Some(Self::Shutdown),
             "ATBUS_CLOSE_REASON_PEER_RESET" => Some(Self::PeerReset),
+            "ATBUS_CLOSE_REASON_UNAUTHORIZED" => Some(Self::Unauthorized),
             _ => None,
         }
     }

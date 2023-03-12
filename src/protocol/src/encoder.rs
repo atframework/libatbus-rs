@@ -6,6 +6,7 @@ use std::convert::From;
 use super::error::{ProtocolError, ProtocolResult};
 use super::frame_block;
 use super::FrameMessage;
+use super::proto;
 
 use bytes;
 use prost::Message;
@@ -13,7 +14,8 @@ use prost::Message;
 pub struct EncoderFrame<'a> {
     message: &'a FrameMessage,
     message_length: usize,
-    varint_length: usize,
+    varint_length_size: usize,
+    varint_version_size: usize,
 }
 
 impl<'a> EncoderFrame<'a> {
@@ -22,9 +24,12 @@ impl<'a> EncoderFrame<'a> {
         EncoderFrame {
             message: msg,
             message_length: message_length,
-            varint_length: frame_block::FrameBlockAlgorithm::compute_frame_length_consume(
+            varint_length_size: frame_block::FrameBlockAlgorithm::compute_varint_consume(
                 message_length as u64,
             ),
+            varint_version_size: frame_block::FrameBlockAlgorithm::compute_varint_consume(
+                proto::atbus::protocol::AtbusProtocolConst::Version as u64,
+            )
         }
     }
 
@@ -40,7 +45,7 @@ impl<'a> EncoderFrame<'a> {
 
     #[inline]
     pub fn get_total_length(&self) -> usize {
-        self.varint_length + self.message_length + frame_block::FRAME_HASH_SIZE
+        self.varint_version_size + self.varint_length_size + self.message_length + frame_block::FRAME_HASH_SIZE
     }
 }
 
@@ -71,8 +76,20 @@ impl Encoder {
             ));
         }
 
-        let mut target = &mut output[0..input.varint_length];
-        match frame_block::FrameBlockAlgorithm::encode_frame_length(
+        let mut target = &mut output[0..input.varint_version_size];
+        match frame_block::FrameBlockAlgorithm::encode_varint(
+            &mut target,
+            proto::atbus::protocol::AtbusProtocolConst::Version as u64,
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(e);
+            }
+        }
+
+        let mut start_offset = input.varint_version_size;
+        let mut target = &mut output[start_offset..start_offset + input.varint_length_size];
+        match frame_block::FrameBlockAlgorithm::encode_varint(
             &mut target,
             input.get_message_length() as u64,
         ) {
@@ -81,23 +98,25 @@ impl Encoder {
                 return Err(e);
             }
         }
+        start_offset += input.varint_length_size;
 
         let mut output_message =
-            &mut output[input.varint_length..input.varint_length + input.get_message_length()];
+            &mut output[start_offset..start_offset + input.get_message_length()];
         match input.get_message().encode(&mut output_message) {
             Ok(_) => {}
             Err(e) => {
                 return Err(ProtocolError::EncodeFailed(e));
             }
         }
+        start_offset += input.get_message_length();
 
-        let target = &output[input.varint_length..input.varint_length + input.get_message_length()];
+        let target = &output[0..start_offset];
         let hash = frame_block::FrameBlockAlgorithm::hash(&target);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
                 hash.get_unchecked(0),
-                output.get_unchecked_mut(input.varint_length + input.get_message_length()),
+                output.get_unchecked_mut(start_offset),
                 frame_block::FRAME_HASH_SIZE,
             );
         }

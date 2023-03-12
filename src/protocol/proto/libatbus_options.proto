@@ -8,12 +8,10 @@ option optimize_for = SPEED;
 // --cpp_out=lite:,--cpp_out=
 option cc_enable_arenas = true;
 
-message command_options {
-  // allow extension
-  extensions 2000 to max;
-}
-
 message packet_options {
+  // Used to verify a untrusted endpoint
+  optional bytes token = 1;
+
   // allow extension
   extensions 2000 to max;
 }
