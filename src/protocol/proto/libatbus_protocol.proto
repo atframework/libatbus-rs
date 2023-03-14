@@ -60,12 +60,12 @@ message stream_acknowledge {
 
   // All datas before this offest are received.(Not include)
   int64 acknowledge_offset = 2;
+
+  // Max received offest.(Not include, this is used to detect and resend lost packets)
+  int64 received_max_offset = 3;
 }
 
-message ping_data {
-  int64 timepoint_seconds = 3;
-  int32 timepoint_nanos   = 4;
-}
+message ping_data { int64 timepoint_microseconds = 1; }
 
 message forward_data {
   int32 version       = 1;
@@ -82,23 +82,27 @@ message close_reason_data {
 }
 
 message packet_content {
-  int32 packet_type = 1; // @see ATBUS_INTERNAL_PACKET_TYPE
-  bytes data        = 2;
+  message fragment_type {
+    int32 packet_type = 1; // @see ATBUS_INTERNAL_PACKET_TYPE
+    bytes data        = 2;
 
-  // When has_more is true this is not the last frame of current packet.
-  // We need wait for more frame to finish this packet.
-  bool has_more = 3;
+    // When has_more is true this is not the last frame of current packet.
+    // We need wait for more frame to finish this packet.
+    bool has_more = 3;
 
-  packet_options options = 4;
-  // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
-  // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
-  map<string, string> labels = 5; // allow custom labels
+    packet_options options = 4;
+    // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+    // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
+    map<string, string> labels = 5; // allow custom labels
 
-  // This field should exists when first create a relay connection.
-  forward_data forward_for = 6;
+    // This field should exists when first create a relay connection.
+    forward_data forward_for = 6;
 
-  // This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set.
-  close_reason_data close_reason = 7;
+    // This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set.
+    close_reason_data close_reason = 7;
+  }
+
+  repeated fragment_type fragment = 1;
 }
 
 message packet_data {
@@ -107,20 +111,22 @@ message packet_data {
   int64 stream_id     = 1;
   int64 stream_offset = 2;
 
-  // content is encoded and crypted repeated packet_content
+  // content is encoded and crypted packet_content
   bytes content = 3;
   // @see ATBUS_PACKET_FLAG_TYPE
   int32 flags = 4;
   // How many datas we should ingnore for padding.
   // It's usually used by the last package of encrypted data.
   int32 padding_size = 5;
+
+  // Filled by connection to detect delay
+  int64 timepoint_microseconds = 6;
 }
 
 message acknowledge_data {
   stream_acknowledge acknowledge = 1;
 
-  int64 timepoint_seconds = 3;
-  int32 timepoint_nanos   = 4;
+  int64 timepoint_microseconds = 2;
 
   // Tell relaysvr to acknowledge forward connection,so relaysvr will not fill packet_data.forward_for
   // for this connection any more.

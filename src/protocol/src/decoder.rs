@@ -150,6 +150,7 @@ impl Decoder {
 mod test {
     use crate::libatbus_utility;
     use crate::rand::{thread_rng, Rng};
+    use std::time;
 
     use super::super::encoder::{Encoder, EncoderFrame};
     use super::super::proto;
@@ -182,6 +183,10 @@ mod test {
             content: vec![b'0'; content_length],
             flags: PacketFlagType::ResetOffset as i32,
             padding_size: thread_rng().gen_range(0..content_length / 2) as i32,
+            timepoint_microseconds: time::SystemTime::now()
+                .duration_since(time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as i64,
         };
         thread_rng().fill(body.content.as_mut_slice());
 

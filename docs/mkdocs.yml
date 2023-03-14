@@ -1,0 +1,39 @@
+site_name: libatbus-rs
+docs_dir: src
+# nav:
+#   - Home: 'README.md'
+#   - Document: index.md
+theme:
+  name: readthedocs
+  locale: zh_CN
+  highlightjs: true
+  hljs_languages:
+    - yaml
+    - bash
+    - cpp
+    - bash
+    - markdown
+    - asciidoc
+    - latex
+    - xml
+    - json
+    - cmake
+    - rust
+    - go
+    - diff
+    - ini # TOML
+    - javascript
+    - typescript
+    - protobuf
+# extra_css:
+#   - css/extra.css
+#   - css/second_extra.css
+# extra_javascript:
+#   -
+#   -
+markdown_extensions:
+  - smarty
+  - toc:
+      permalink: True
+plugins:
+  - search

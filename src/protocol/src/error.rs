@@ -28,8 +28,6 @@ pub enum ProtocolError {
     TruncatedMessage,
     /// Protocol hash code mismatch(expect, got)
     ProtocolHashMismatch(Vec<u8>, Vec<u8>),
-    /// Need pick packet before write more data
-    HasPendingPacket,
     /// Decode failed
     DecodeFailed(DecodeError),
     /// Encode failed
@@ -73,9 +71,6 @@ impl fmt::Display for ProtocolError {
             ProtocolError::ProtocolHashMismatch(e, r) => {
                 write!(f, "protocol hash mismatch, expect: {:?}, got: {:?}", e, r)
             }
-            ProtocolError::HasPendingPacket => {
-                write!(f, "need pick packet before put more data")
-            }
             &ProtocolError::DecodeFailed(ref e) => {
                 write!(f, "decode failed: {}", e)
             }
@@ -106,7 +101,6 @@ impl Error for ProtocolError {
                 "truncated message, maybe need more data to decode it"
             }
             &ProtocolError::ProtocolHashMismatch(_, _) => "protocol hash mismatch",
-            &ProtocolError::HasPendingPacket => "need pick packet before put more data",
             &ProtocolError::DecodeFailed(ref e) => &e.description(),
             &ProtocolError::EncodeFailed(ref e) => &e.description(),
         }

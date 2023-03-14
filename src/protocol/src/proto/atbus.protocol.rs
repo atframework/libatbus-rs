@@ -219,14 +219,15 @@ pub struct StreamAcknowledge {
     /// All datas before this offest are received.(Not include)
     #[prost(int64, tag = "2")]
     pub acknowledge_offset: i64,
+    /// Max received offest.(Not include, this is used to detect and resend lost packets)
+    #[prost(int64, tag = "3")]
+    pub received_max_offset: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PingData {
-    #[prost(int64, tag = "3")]
-    pub timepoint_seconds: i64,
-    #[prost(int32, tag = "4")]
-    pub timepoint_nanos: i32,
+    #[prost(int64, tag = "1")]
+    pub timepoint_microseconds: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -255,32 +256,41 @@ pub struct CloseReasonData {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PacketContent {
-    /// @see ATBUS_INTERNAL_PACKET_TYPE
-    #[prost(int32, tag = "1")]
-    pub packet_type: i32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
-    /// When has_more is true this is not the last frame of current packet.
-    /// We need wait for more frame to finish this packet.
-    #[prost(bool, tag = "3")]
-    pub has_more: bool,
-    #[prost(message, optional, tag = "4")]
-    pub options: ::core::option::Option<PacketOptions>,
-    /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
-    /// <https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto>
-    ///
-    /// allow custom labels
-    #[prost(map = "string, string", tag = "5")]
-    pub labels: ::std::collections::HashMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    /// This field should exists when first create a relay connection.
-    #[prost(message, optional, tag = "6")]
-    pub forward_for: ::core::option::Option<ForwardData>,
-    /// This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set.
-    #[prost(message, optional, tag = "7")]
-    pub close_reason: ::core::option::Option<CloseReasonData>,
+    #[prost(message, repeated, tag = "1")]
+    pub fragment: ::prost::alloc::vec::Vec<packet_content::FragmentType>,
+}
+/// Nested message and enum types in `packet_content`.
+pub mod packet_content {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FragmentType {
+        /// @see ATBUS_INTERNAL_PACKET_TYPE
+        #[prost(int32, tag = "1")]
+        pub packet_type: i32,
+        #[prost(bytes = "vec", tag = "2")]
+        pub data: ::prost::alloc::vec::Vec<u8>,
+        /// When has_more is true this is not the last frame of current packet.
+        /// We need wait for more frame to finish this packet.
+        #[prost(bool, tag = "3")]
+        pub has_more: bool,
+        #[prost(message, optional, tag = "4")]
+        pub options: ::core::option::Option<super::PacketOptions>,
+        /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
+        /// <https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto>
+        ///
+        /// allow custom labels
+        #[prost(map = "string, string", tag = "5")]
+        pub labels: ::std::collections::HashMap<
+            ::prost::alloc::string::String,
+            ::prost::alloc::string::String,
+        >,
+        /// This field should exists when first create a relay connection.
+        #[prost(message, optional, tag = "6")]
+        pub forward_for: ::core::option::Option<super::ForwardData>,
+        /// This field only be filled when ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM or ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION is set.
+        #[prost(message, optional, tag = "7")]
+        pub close_reason: ::core::option::Option<super::CloseReasonData>,
+    }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -291,7 +301,7 @@ pub struct PacketData {
     pub stream_id: i64,
     #[prost(int64, tag = "2")]
     pub stream_offset: i64,
-    /// content is encoded and crypted repeated packet_content
+    /// content is encoded and crypted packet_content
     #[prost(bytes = "vec", tag = "3")]
     pub content: ::prost::alloc::vec::Vec<u8>,
     /// @see ATBUS_PACKET_FLAG_TYPE
@@ -301,16 +311,17 @@ pub struct PacketData {
     /// It's usually used by the last package of encrypted data.
     #[prost(int32, tag = "5")]
     pub padding_size: i32,
+    /// Filled by connection to detect delay
+    #[prost(int64, tag = "6")]
+    pub timepoint_microseconds: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AcknowledgeData {
     #[prost(message, optional, tag = "1")]
     pub acknowledge: ::core::option::Option<StreamAcknowledge>,
-    #[prost(int64, tag = "3")]
-    pub timepoint_seconds: i64,
-    #[prost(int32, tag = "4")]
-    pub timepoint_nanos: i32,
+    #[prost(int64, tag = "2")]
+    pub timepoint_microseconds: i64,
     /// Tell relaysvr to acknowledge forward connection,so relaysvr will not fill packet_data.forward_for
     /// for this connection any more.
     #[prost(message, optional, tag = "11")]
