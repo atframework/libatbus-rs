@@ -32,6 +32,7 @@ pub type PacketOptionMessage = proto::atbus::protocol::PacketOptions;
 pub type CloseReasonMessage = proto::atbus::protocol::CloseReasonData;
 
 pub type PacketFlagType = proto::atbus::protocol::AtbusPacketFlagType;
+pub type PacketFragmentFlagType = proto::atbus::protocol::AtbusPacketFragmentFlagType;
 
 pub type StreamMessage = stream_message::StreamMessage;
 pub type BoxedStreamMessage = Box<StreamMessage>;

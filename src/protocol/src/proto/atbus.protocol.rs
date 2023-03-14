@@ -234,10 +234,10 @@ pub struct PingData {
 pub struct ForwardData {
     #[prost(int32, tag = "1")]
     pub version: i32,
-    #[prost(bytes = "vec", tag = "2")]
-    pub source: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub scheme: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "2")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub scheme: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "4")]
     pub address: ::prost::alloc::vec::Vec<u8>,
     #[prost(int32, tag = "5")]
@@ -269,10 +269,9 @@ pub mod packet_content {
         pub packet_type: i32,
         #[prost(bytes = "vec", tag = "2")]
         pub data: ::prost::alloc::vec::Vec<u8>,
-        /// When has_more is true this is not the last frame of current packet.
-        /// We need wait for more frame to finish this packet.
-        #[prost(bool, tag = "3")]
-        pub has_more: bool,
+        /// @see ATBUS_PACKET_FRAGMENT_FLAG_TYPE
+        #[prost(int32, tag = "3")]
+        pub fragment_flag: i32,
         #[prost(message, optional, tag = "4")]
         pub options: ::core::option::Option<super::PacketOptions>,
         /// <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set>
@@ -330,13 +329,13 @@ pub struct AcknowledgeData {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageHead {
-    #[prost(bytes = "vec", tag = "1")]
-    pub source: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub destination: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "1")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub destination: ::prost::alloc::string::String,
     /// Always filled by relaysvr
-    #[prost(bytes = "vec", tag = "3")]
-    pub forward_for_source: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "3")]
+    pub forward_for_source: ::prost::alloc::string::String,
     /// Always filled by relaysvr
     #[prost(int64, tag = "4")]
     pub forward_for_connection_id: i64,
@@ -355,9 +354,9 @@ pub mod frame_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
         #[prost(message, tag = "5")]
-        NodePing(super::PingData),
+        Ping(super::PingData),
         #[prost(message, tag = "6")]
-        NodePong(super::PingData),
+        Pong(super::PingData),
         #[prost(message, tag = "7")]
         Packet(super::PacketData),
         #[prost(message, tag = "8")]
@@ -372,7 +371,7 @@ pub enum AtbusProtocolConst {
     MagicNumber = 16777619,
     Version = 3,
     /// Internal packet type, user custom type should be greater than this.
-    InternalPacketType = 1000,
+    InternalPacketType = 100,
 }
 impl AtbusProtocolConst {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -404,7 +403,7 @@ impl AtbusProtocolConst {
 #[repr(i32)]
 pub enum AtbusPacketFlagType {
     /// default value
-    AatbusPacketFlagTypeNone = 0,
+    None = 0,
     /// Finish current stream, similar to FIN of TCP
     /// Receiver should destroy this stream when got this flag
     FinishStream = 1,
@@ -417,6 +416,8 @@ pub enum AtbusPacketFlagType {
     /// When any packet is sent partly by this connection and the rest fragments are received by other connections, we also
     /// will send the first fragmentof next packet with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
     ResetOffset = 4,
+    /// TLS Handshake
+    TlsHandshake = 8,
 }
 impl AtbusPacketFlagType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -425,23 +426,53 @@ impl AtbusPacketFlagType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            AtbusPacketFlagType::AatbusPacketFlagTypeNone => {
-                "AATBUS_PACKET_FLAG_TYPE_NONE"
-            }
+            AtbusPacketFlagType::None => "ATBUS_PACKET_FLAG_TYPE_NONE",
             AtbusPacketFlagType::FinishStream => "ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM",
             AtbusPacketFlagType::FinishConnection => {
                 "ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION"
             }
             AtbusPacketFlagType::ResetOffset => "ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET",
+            AtbusPacketFlagType::TlsHandshake => "ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "AATBUS_PACKET_FLAG_TYPE_NONE" => Some(Self::AatbusPacketFlagTypeNone),
+            "ATBUS_PACKET_FLAG_TYPE_NONE" => Some(Self::None),
             "ATBUS_PACKET_FLAG_TYPE_FINISH_STREAM" => Some(Self::FinishStream),
             "ATBUS_PACKET_FLAG_TYPE_FINISH_CONNECTION" => Some(Self::FinishConnection),
             "ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET" => Some(Self::ResetOffset),
+            "ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE" => Some(Self::TlsHandshake),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AtbusPacketFragmentFlagType {
+    None = 0,
+    /// This is not the last fragment of current packet.
+    /// We need wait for more fragments to finish it.
+    HasMore = 1,
+}
+impl AtbusPacketFragmentFlagType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            AtbusPacketFragmentFlagType::None => "ATBUS_PACKET_FRAGMENT_FLAG_TYPE_NONE",
+            AtbusPacketFragmentFlagType::HasMore => {
+                "ATBUS_PACKET_FRAGMENT_FLAG_TYPE_HAS_MORE"
+            }
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ATBUS_PACKET_FRAGMENT_FLAG_TYPE_NONE" => Some(Self::None),
+            "ATBUS_PACKET_FRAGMENT_FLAG_TYPE_HAS_MORE" => Some(Self::HasMore),
             _ => None,
         }
     }

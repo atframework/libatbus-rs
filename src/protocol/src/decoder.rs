@@ -172,9 +172,9 @@ mod test {
 
     fn generate_packet_message(content_length: usize) -> FrameMessage {
         let head = proto::atbus::protocol::MessageHead {
-            source: libatbus_utility::unique_id::generate_stanard_uuid_v4().to_vec(),
-            destination: libatbus_utility::unique_id::generate_stanard_uuid_v4().to_vec(),
-            forward_for_source: vec![],
+            source: libatbus_utility::unique_id::generate_stanard_uuid_v4_string(false),
+            destination: libatbus_utility::unique_id::generate_stanard_uuid_v4_string(false),
+            forward_for_source: String::default(),
             forward_for_connection_id: 0,
         };
         let mut body = PacketMessage {

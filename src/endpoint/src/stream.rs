@@ -6,7 +6,8 @@ use std::ops::Bound::Included;
 
 use libatbus_protocol::{
     BoxedFrameMessage, BoxedStreamMessage, CloseReasonMessage, ForwardMessage, FrameMessageBody,
-    PacketFlagType, PacketMessage, PacketOptionMessage, StreamFramePacketMessage,
+    PacketFlagType, PacketFragmentFlagType, PacketMessage, PacketOptionMessage,
+    StreamFramePacketMessage,
 };
 
 pub struct Stream {
@@ -72,11 +73,23 @@ impl Stream {
             }
         };
 
-        if packet_body.content.is_empty() || packet_body.stream_id != self.stream_id {
+        if packet_body.stream_id != self.stream_id {
             return;
         }
         let this_frame_message_start = packet_body.stream_offset;
         let packet_flag = packet_body.flags;
+
+        // Drop unfinished packet when got ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
+        if packet_flag & (PacketFlagType::ResetOffset as i32) != 0 {
+            self.reset_acknowledge_offset(this_frame_message_start);
+        }
+
+        // TODO: 处理Handshake阶段
+
+        // Maybe a empty package with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET, to just skip some fragments.
+        if packet_body.content.is_empty() {
+            return;
+        }
 
         let frame_message = if let Ok(p) = StreamFramePacketMessage::with(frame) {
             p
@@ -90,11 +103,6 @@ impl Stream {
 
         let this_frame_message_end =
             this_frame_message_start + frame_message.get_packet_length() as i64;
-
-        // Drop unfinished packet when got ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
-        if packet_flag & (PacketFlagType::ResetOffset as i32) != 0 {
-            self.reset_acknowledge_offset(this_frame_message_start);
-        }
 
         // if received_frames already contains this frame, just ingnore this one.
         {
@@ -159,7 +167,7 @@ impl Stream {
                 if !self.received_packet_finished {
                     let mut has_finished_packet = false;
                     for fragment in &checked.1.packet {
-                        if !fragment.has_more {
+                        if (fragment.fragment_flag & PacketFragmentFlagType::HasMore as i32) != 0 {
                             has_finished_packet = true;
                             break;
                         }

@@ -86,10 +86,112 @@ https://doc.rust-lang.org/cargo/reference/config.html
 |      varint ->  Length      |
 +-----------------------------+
 |    frame_message(Length)    |
-+++++++++++++++++++++++++++++++
++-----------------------------+
 | HASH of above all(4 Bytes)  |
 +++++++++++++++++++++++++++++++
 
+```
+
+frame_message的部分由 `libatbus_protocol.proto` 定义下一级消息结构。
+混流和多stream并发参考了QUIC和HTTP/3的一些设计，主要内容如下(为了适应跨语言和某些框架不支持无符号数，我们全部使用有符号数字):
+
+```protobuf
+// 公共消息头
+message message_head {
+  // 发送来源名称
+  string source = 1;
+
+  // 发送目标服务名
+  string destination = 2;
+
+  // 由中继服务填充，指示为谁转发
+  string forward_for_source = 3;
+
+  // 由中继服务填充，指示转发的连接，方便下级节点查询连接的ip、端口等。
+  int64 forward_for_connection_id = 4;
+}
+
+// 消息体
+message frame_message {
+  message_head head = 1;
+  oneof        body {
+    // ping/pong用于定期测试连接的延迟，每个连接单独处理
+    ping_data        ping   = 5;
+    ping_data        pong   = 6;
+    packet_data      packet      = 7;
+    acknowledge_data acknowledge = 8;
+  }
+}
+
+// 每个连接单独acknowledge
+message stream_acknowledge {
+  // 每个stream单独记接收通道，这样对于不同类型的消息可以互不影响接收。
+  int64 stream_id = 1;
+
+  // stream已经全部收到的消息序号
+  // 每个流可能重复收到多个acknowledge，已最大的为准。
+  int64 acknowledge_offset = 2;
+
+  // stream已经收到的最大消息序号
+  // 每个流可能重复收到多个acknowledge，已最大的为准。
+  // 如果acknowledge_offset和received_max_offset差异过大，我们基本上可以认为大概率发生了丢包，可以立即补发。
+  int64 received_max_offset = 3;
+}
+
+message packet_data {
+  // Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
+  // We can transfer different stream on different connection to improve throughput
+  int64 stream_id     = 1;
+  int64 stream_offset = 2;
+
+  // 数据包内容。
+  // 对于TLS握手阶段，这里透传握手的原始数据，此时 flags 中打 ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE 标记
+  // 对于数据传输阶段，这个内容详细数据类型见 packet_content，可能被加密或压缩，取决于配置。
+  bytes content = 3;
+
+  // 包标签，只是是否断开连接、流，是否握手包等等。
+  // 对于混流时，如果一个流的神域数据不需要再被发送，数据包可以通过打ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET标记忽略先前的包。
+  int32 flags = 4;
+
+  // 指示收到的数据中，有多少是由于对齐操作产生，不实际参与解包操作。
+  // 这通常在存在加密套件时有用。
+  int32 padding_size = 5;
+
+  // 这个消息用于回带在acknowledge中，实时检测连接延迟。
+  int64 timepoint_microseconds = 6;
+}
+
+message packet_content {
+  message fragment_type {
+    // 包类型，默认0为数据包，这样最大可能出现的包没有网络开销。
+    int32 packet_type = 1;
+
+    // 实际数据。
+    bytes data        = 2;
+
+    // 包含标记位指示是否有后续包，如果没有表示没有被分包或者这是分包的最后一个包。
+    // 此处类似于websocket的final fragment标记。
+    int32 fragment_flag = 3;
+
+    // 自定义选项，比如对于某些客户端鉴权流程中，里面可以包含token信息。
+    packet_options options = 4;
+
+    // 数据包标签，类似k8s的流量标签，仅第一个包需要传该值。
+    // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+    // https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto
+    map<string, string> labels = 5; // allow custom labels
+
+    // 转发来源信息，由relay服务填充。
+    // 当建立连接收到对端的acknowledge后，就不再需要填充这个信息。
+    forward_data forward_for = 6;
+
+    // 如果是关闭消息，这里包含关闭原因。
+    close_reason_data close_reason = 7;
+  }
+
+  // 每个数据帧可能包含多个数据片段，有可能包含上一个packet的最后一个fragment和下一个packet的第一个fragment
+  repeated fragment_type fragment = 1;
+}
 ```
 
 ## 服务发现
@@ -143,6 +245,6 @@ RUDP的大部分逻辑和Stream分片管理是重合的。我们考虑到后面�
 除去IPv4包头的20字接和UDP包头的8字节。剩下要保证可达性，比较简单的方法是让包的正文小于548字节。这时候单单解耦而为相似功能而增加一批包头就显得很不合算了。
 
 > + [RFC2460](https://www.ietf.org/rfc/rfc2460.txt) 指示IPv6的最小MTU为 1280。
->   + IPv6 报文头最小40字节。
+>   + IPv6 报文头最小40字节，还要除去8字节fragment头，无扩展选项是最小可用1232字节（如果再除去UDP的8字节头剩余1224字节）。
 > + [RFC4821](http://www.ietf.org/rfc/rfc4821.txt) 建议MTU为 1024 时应该足够安全。
 

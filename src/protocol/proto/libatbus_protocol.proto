@@ -18,11 +18,11 @@ enum ATBUS_PROTOCOL_CONST {
   ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3; // minimal protocol version supported
 
   // Internal packet type, user custom type should be greater than this.
-  ATBUS_PROTOCOL_CONST_INTERNAL_PACKET_TYPE = 1000;
+  ATBUS_PROTOCOL_CONST_INTERNAL_PACKET_TYPE = 100;
 }
 
 enum ATBUS_PACKET_FLAG_TYPE {
-  AATBUS_PACKET_FLAG_TYPE_NONE = 0; // default value
+  ATBUS_PACKET_FLAG_TYPE_NONE = 0; // default value
 
   // Finish current stream, similar to FIN of TCP
   // Receiver should destroy this stream when got this flag
@@ -38,6 +38,17 @@ enum ATBUS_PACKET_FLAG_TYPE {
   // When any packet is sent partly by this connection and the rest fragments are received by other connections, we also
   // will send the first fragmentof next packet with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
   ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET = 4;
+
+  // TLS Handshake
+  ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE = 8;
+}
+
+enum ATBUS_PACKET_FRAGMENT_FLAG_TYPE {
+  ATBUS_PACKET_FRAGMENT_FLAG_TYPE_NONE = 0;
+
+  // This is not the last fragment of current packet.
+  // We need wait for more fragments to finish it.
+  ATBUS_PACKET_FRAGMENT_FLAG_TYPE_HAS_MORE = 1;
 }
 
 enum ATBUS_CLOSE_REASON {
@@ -68,12 +79,12 @@ message stream_acknowledge {
 message ping_data { int64 timepoint_microseconds = 1; }
 
 message forward_data {
-  int32 version       = 1;
-  bytes source        = 2;
-  bytes scheme        = 3;
-  bytes address       = 4;
-  int32 port          = 5;
-  int64 connection_id = 6;
+  int32  version       = 1;
+  string source        = 2;
+  string scheme        = 3;
+  bytes  address       = 4;
+  int32  port          = 5;
+  int64  connection_id = 6;
 }
 
 message close_reason_data {
@@ -86,9 +97,8 @@ message packet_content {
     int32 packet_type = 1; // @see ATBUS_INTERNAL_PACKET_TYPE
     bytes data        = 2;
 
-    // When has_more is true this is not the last frame of current packet.
-    // We need wait for more frame to finish this packet.
-    bool has_more = 3;
+    // @see ATBUS_PACKET_FRAGMENT_FLAG_TYPE
+    int32 fragment_flag = 3;
 
     packet_options options = 4;
     // https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
@@ -134,17 +144,17 @@ message acknowledge_data {
 }
 
 message message_head {
-  bytes source                    = 1;
-  bytes destination               = 2;
-  bytes forward_for_source        = 3; // Always filled by relaysvr
-  int64 forward_for_connection_id = 4; // Always filled by relaysvr
+  string source                    = 1;
+  string destination               = 2;
+  string forward_for_source        = 3; // Always filled by relaysvr
+  int64  forward_for_connection_id = 4; // Always filled by relaysvr
 }
 
 message frame_message {
   message_head head = 1;
   oneof        body {
-    ping_data        node_ping   = 5;
-    ping_data        node_pong   = 6;
+    ping_data        ping        = 5;
+    ping_data        pong        = 6;
     packet_data      packet      = 7;
     acknowledge_data acknowledge = 8;
   }

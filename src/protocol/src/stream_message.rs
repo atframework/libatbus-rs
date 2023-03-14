@@ -51,7 +51,10 @@ impl StreamFramePacketMessage {
             }
         };
 
-        if packet_body.content.is_empty() || packet_body.stream_id < 0 {
+        if packet_body.content.is_empty()
+            || packet_body.stream_id < 0
+            || packet_body.padding_size as usize >= packet_body.content.len()
+        {
             return Ok(StreamFramePacketMessage {
                 frame_message: frame,
                 packet: vec![],
@@ -59,10 +62,19 @@ impl StreamFramePacketMessage {
             });
         }
 
-        let packets = match PacketContentMessage::decode(packet_body.content.as_ref()) {
-            Ok(p) => p,
-            Err(e) => {
-                return Err(ProtocolError::DecodeFailed(e));
+        let packets = {
+            let content_bytes = if packet_body.padding_size > 0 {
+                &packet_body.content.as_slice()
+                    [0..packet_body.content.len() - packet_body.padding_size as usize]
+            } else {
+                &packet_body.content.as_slice()
+            };
+
+            match PacketContentMessage::decode(content_bytes) {
+                Ok(p) => p,
+                Err(e) => {
+                    return Err(ProtocolError::DecodeFailed(e));
+                }
             }
         };
         packet_body.content.clear();
@@ -94,7 +106,7 @@ impl StreamFramePacketMessage {
                     let modify_fragment = PacketFragmentMessage {
                         packet_type: fragment.packet_type,
                         data: Vec::from(&fragment.data.as_slice()[left_offset..]),
-                        has_more: fragment.has_more,
+                        fragment_flag: fragment.fragment_flag,
                         options: fragment.options.clone(),
                         labels: fragment.labels.clone(),
                         forward_for: fragment.forward_for.clone(),
