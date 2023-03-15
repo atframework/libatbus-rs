@@ -517,6 +517,7 @@ impl AtbusCloseReason {
 pub enum AtbusPacketType {
     Data = 0,
     Command = 1,
+    Handshake = 2,
 }
 impl AtbusPacketType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -527,6 +528,7 @@ impl AtbusPacketType {
         match self {
             AtbusPacketType::Data => "ATBUS_PACKET_TYPE_DATA",
             AtbusPacketType::Command => "ATBUS_PACKET_TYPE_COMMAND",
+            AtbusPacketType::Handshake => "ATBUS_PACKET_TYPE_HANDSHAKE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -534,6 +536,7 @@ impl AtbusPacketType {
         match value {
             "ATBUS_PACKET_TYPE_DATA" => Some(Self::Data),
             "ATBUS_PACKET_TYPE_COMMAND" => Some(Self::Command),
+            "ATBUS_PACKET_TYPE_HANDSHAKE" => Some(Self::Handshake),
             _ => None,
         }
     }

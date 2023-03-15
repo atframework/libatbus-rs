@@ -9,7 +9,7 @@ use crate::prost::Message;
 use super::{
     error::{ProtocolError, ProtocolResult},
     BoxedFrameMessage, CloseReasonMessage, ForwardMessage, FrameMessageBody, PacketContentMessage,
-    PacketFragmentMessage, PacketOptionMessage,
+    PacketFragmentFlagType, PacketFragmentMessage, PacketOptionMessage,
 };
 
 pub struct StreamMessage {
@@ -25,15 +25,25 @@ pub struct StreamMessage {
     pub close_reason: Option<Box<CloseReasonMessage>>,
 }
 
-pub struct StreamFramePacketMessage {
-    pub frame_message: BoxedFrameMessage,
-    pub packet: Vec<PacketFragmentMessage>,
-    length: usize,
+pub struct StreamPacketFragmentMessage {
+    offset: i64,
+    data: PacketFragmentMessage,
 }
 
-impl StreamFramePacketMessage {
-    pub fn with(mut frame: BoxedFrameMessage) -> ProtocolResult<StreamFramePacketMessage> {
-        let mut frame_body = match frame.body.as_mut() {
+pub struct StreamPacketFragmentUnpack {
+    pub stream_offset: i64,
+    pub fragment: Vec<StreamPacketFragmentMessage>,
+    pub packet_flag: i32,
+    pub timepoint_microseconds: i64,
+}
+
+impl StreamPacketFragmentMessage {
+    pub fn new(offset: i64, data: PacketFragmentMessage) -> Self {
+        StreamPacketFragmentMessage { offset, data }
+    }
+
+    pub fn unpack(frame: BoxedFrameMessage) -> ProtocolResult<StreamPacketFragmentUnpack> {
+        let frame_body = match frame.body.as_ref() {
             Some(b) => b,
             _ => {
                 return Err(ProtocolError::IoError(io::Error::from(
@@ -42,8 +52,8 @@ impl StreamFramePacketMessage {
             }
         };
 
-        let packet_body = match &mut frame_body {
-            &mut FrameMessageBody::Packet(ref mut p) => p,
+        let packet_body = match &frame_body {
+            &FrameMessageBody::Packet(ref p) => p,
             _ => {
                 return Err(ProtocolError::IoError(io::Error::from(
                     io::ErrorKind::InvalidInput,
@@ -51,14 +61,21 @@ impl StreamFramePacketMessage {
             }
         };
 
+        if packet_body.stream_offset < 0 {
+            return Err(ProtocolError::IoError(io::Error::from(
+                io::ErrorKind::InvalidInput,
+            )));
+        }
+
         if packet_body.content.is_empty()
             || packet_body.stream_id < 0
             || packet_body.padding_size as usize >= packet_body.content.len()
         {
-            return Ok(StreamFramePacketMessage {
-                frame_message: frame,
-                packet: vec![],
-                length: 0,
+            return Ok(StreamPacketFragmentUnpack {
+                stream_offset: packet_body.stream_offset,
+                fragment: vec![],
+                packet_flag: packet_body.flags,
+                timepoint_microseconds: packet_body.timepoint_microseconds,
             });
         }
 
@@ -77,67 +94,68 @@ impl StreamFramePacketMessage {
                 }
             }
         };
-        packet_body.content.clear();
 
-        let mut length = 0;
-        for p in &packets.fragment {
-            length += p.data.len();
+        let mut ret = StreamPacketFragmentUnpack {
+            stream_offset: packet_body.stream_offset,
+            fragment: vec![],
+            packet_flag: packet_body.flags,
+            timepoint_microseconds: packet_body.timepoint_microseconds,
+        };
+        ret.fragment.reserve(packets.fragment.len());
+
+        let mut start_offset = packet_body.stream_offset;
+        for p in packets.fragment {
+            let length = p.data.len();
+
+            ret.fragment
+                .push(StreamPacketFragmentMessage::new(start_offset, p));
+
+            start_offset += length as i64;
         }
 
-        Ok(StreamFramePacketMessage {
-            frame_message: frame,
-            packet: packets.fragment,
-            length: length,
-        })
+        Ok(ret)
     }
 
-    pub fn get_packet_length(&self) -> usize {
-        self.length
+    pub fn get_fragment_message(&self) -> &PacketFragmentMessage {
+        &self.data
     }
 
-    pub fn sub_frame(&self, start_offset: usize) -> StreamFramePacketMessage {
-        let mut fragments = vec![];
-        let mut left_offset = start_offset;
-        for fragment in &self.packet {
-            if left_offset > 0 {
-                if left_offset >= fragment.data.len() {
-                    left_offset -= fragment.data.len();
-                } else {
-                    let modify_fragment = PacketFragmentMessage {
-                        packet_type: fragment.packet_type,
-                        data: Vec::from(&fragment.data.as_slice()[left_offset..]),
-                        fragment_flag: fragment.fragment_flag,
-                        options: fragment.options.clone(),
-                        labels: fragment.labels.clone(),
-                        forward_for: fragment.forward_for.clone(),
-                        close_reason: fragment.close_reason.clone(),
-                    };
-                    fragments.push(modify_fragment);
-                    left_offset = 0;
-                }
-            } else {
-                fragments.push(fragment.clone());
-            }
-        }
+    pub fn get_message_length(&self) -> usize {
+        self.data.data.len()
+    }
 
-        let mut length = 0;
-        for fragment in &fragments {
-            length += fragment.data.len();
-        }
+    pub fn get_message_begin_offset(&self) -> i64 {
+        self.offset
+    }
 
-        let mut frame_message = self.frame_message.clone();
-        if self.length > length {
-            if let Some(ref mut body) = frame_message.body.as_mut() {
-                if let &mut FrameMessageBody::Packet(p) = body {
-                    p.stream_offset += (self.length - length) as i64;
-                }
-            }
-        }
+    pub fn get_message_end_offset(&self) -> i64 {
+        self.offset + self.data.data.len() as i64
+    }
 
-        StreamFramePacketMessage {
-            frame_message: frame_message,
-            packet: fragments,
-            length: length,
+    pub fn check_fragment_flag(&self, flag: PacketFragmentFlagType) -> bool {
+        (self.data.fragment_flag & flag as i32) != 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.data.len() == 0
+    }
+
+    pub fn sub_frame(&self, start_offset: usize) -> Option<StreamPacketFragmentMessage> {
+        if start_offset >= self.data.data.len() {
+            None
+        } else {
+            Some(Self::new(
+                self.offset + start_offset as i64,
+                PacketFragmentMessage {
+                    packet_type: self.data.packet_type,
+                    data: Vec::from(&self.data.data.as_slice()[start_offset..]),
+                    fragment_flag: self.data.fragment_flag,
+                    options: self.data.options.clone(),
+                    labels: self.data.labels.clone(),
+                    forward_for: self.data.forward_for.clone(),
+                    close_reason: self.data.close_reason.clone(),
+                },
+            ))
         }
     }
 }

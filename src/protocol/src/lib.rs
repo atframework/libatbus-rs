@@ -36,4 +36,5 @@ pub type PacketFragmentFlagType = proto::atbus::protocol::AtbusPacketFragmentFla
 
 pub type StreamMessage = stream_message::StreamMessage;
 pub type BoxedStreamMessage = Box<StreamMessage>;
-pub type StreamFramePacketMessage = stream_message::StreamFramePacketMessage;
+pub type StreamPacketFragmentMessage = stream_message::StreamPacketFragmentMessage;
+pub type StreamPacketFragmentUnpack = stream_message::StreamPacketFragmentUnpack;

@@ -144,9 +144,9 @@ message packet_data {
   int64 stream_id     = 1;
   int64 stream_offset = 2;
 
-  // 数据包内容。
-  // 对于TLS握手阶段，这里透传握手的原始数据，此时 flags 中打 ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE 标记
-  // 对于数据传输阶段，这个内容详细数据类型见 packet_content，可能被加密或压缩，取决于配置。
+  // 数据包内容。详细数据类型见 packet_content。
+  // 对于TLS握手阶段，这里的数据未加密未压缩，此时 flags 中打 ATBUS_PACKET_FLAG_TYPE_TLS_HANDSHAKE 标记。packet_type为 ATBUS_PACKET_TYPE_HANDSHAKE 。
+  // 对于数据传输阶段，这个内容可能被加密或压缩，取决于配置。
   bytes content = 3;
 
   // 包标签，只是是否断开连接、流，是否握手包等等。
@@ -193,6 +193,9 @@ message packet_content {
   repeated fragment_type fragment = 1;
 }
 ```
+
+对于接收端，由于存在混流，可能出现包重叠的情况。对于这种情况，如果接收的包存在包含关系，我们只需要保留大的那个即可。
+如果接收的包是重叠关系，我们在提取数据的时候截止到 `ATBUS_PACKET_FRAGMENT_FLAG_TYPE_HAS_MORE` 标记不存在后。之前的数据块都可以直接丢弃。
 
 ## 服务发现
 
