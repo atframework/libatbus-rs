@@ -42,7 +42,10 @@ impl StreamPacketFragmentMessage {
         StreamPacketFragmentMessage { offset, data }
     }
 
-    pub fn unpack(frame: BoxedFrameMessage) -> ProtocolResult<StreamPacketFragmentUnpack> {
+    pub fn unpack(
+        frame: BoxedFrameMessage,
+        expect_stream_id: Option<i64>,
+    ) -> ProtocolResult<StreamPacketFragmentUnpack> {
         let frame_body = match frame.body.as_ref() {
             Some(b) => b,
             _ => {
@@ -60,6 +63,14 @@ impl StreamPacketFragmentMessage {
                 )));
             }
         };
+
+        if let Some(stream_id) = expect_stream_id {
+            if stream_id != packet_body.stream_id {
+                return Err(ProtocolError::IoError(io::Error::from(
+                    io::ErrorKind::InvalidInput,
+                )));
+            }
+        }
 
         if packet_body.stream_offset < 0 {
             return Err(ProtocolError::IoError(io::Error::from(
@@ -132,8 +143,14 @@ impl StreamPacketFragmentMessage {
         self.offset + self.data.data.len() as i64
     }
 
+    #[inline]
+    pub fn check_target_fragment_flag(target: i32, flag: PacketFragmentFlagType) -> bool {
+        (target & flag as i32) != 0
+    }
+
+    #[inline]
     pub fn check_fragment_flag(&self, flag: PacketFragmentFlagType) -> bool {
-        (self.data.fragment_flag & flag as i32) != 0
+        Self::check_target_fragment_flag(self.data.fragment_flag, flag)
     }
 
     pub fn is_empty(&self) -> bool {

@@ -5,9 +5,16 @@ use std::collections::BTreeMap;
 use std::ops::Bound::Included;
 
 use libatbus_protocol::{
-    BoxedFrameMessage, BoxedStreamMessage, FrameMessageBody, PacketFlagType,
+    error::ProtocolResult, BoxedFrameMessage, BoxedStreamMessage, PacketFlagType,
     PacketFragmentFlagType, StreamPacketFragmentMessage,
 };
+
+pub struct StreamReceiveResult {
+    pub packet_begin_offset: i64,
+    pub packet_end_offset: i64,
+    pub packet_flag: i32,
+    pub timepoint_microseconds: i64,
+}
 
 pub struct Stream {
     stream_id: i64,
@@ -58,12 +65,8 @@ impl Stream {
         }
     }
 
-    pub fn receive(&mut self, frame: BoxedFrameMessage) {
-        let frame_messages = if let Ok(p) = StreamPacketFragmentMessage::unpack(frame) {
-            p
-        } else {
-            return;
-        };
+    pub fn receive(&mut self, frame: BoxedFrameMessage) -> ProtocolResult<StreamReceiveResult> {
+        let frame_messages = StreamPacketFragmentMessage::unpack(frame, Some(self.stream_id))?;
 
         // Drop unfinished packet when got ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
         if frame_messages.stream_offset >= 0
@@ -126,6 +129,13 @@ impl Stream {
 
         // TODO: 提取内部指令数据包
         // TODO: 处理Handshake包，即便在正常数据流过程中也可能夹杂Handshake包，用于换密钥。
+
+        Ok(StreamReceiveResult {
+            packet_begin_offset: this_frame_message_start,
+            packet_end_offset: this_frame_message_end,
+            packet_flag: frame_messages.packet_flag,
+            timepoint_microseconds: frame_messages.timepoint_microseconds,
+        })
     }
 
     fn move_received_acknowledge_offset(&mut self) {

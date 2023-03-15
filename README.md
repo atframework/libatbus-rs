@@ -196,6 +196,9 @@ message packet_content {
 
 对于接收端，由于存在混流，可能出现包重叠的情况。对于这种情况，如果接收的包存在包含关系，我们只需要保留大的那个即可。
 如果接收的包是重叠关系，我们在提取数据的时候截止到 `ATBUS_PACKET_FRAGMENT_FLAG_TYPE_HAS_MORE` 标记不存在后。之前的数据块都可以直接丢弃。
+对于Connection存在过多的未提取数据时，我们先暂存一个数据包，然后对于UDP连接直接丢弃数据，对于TCP连接需要把连接排除Polling，并等待数据被取走后重新加入Polling。
+
+对于发送端，Stream里保存上层传入的原始待发送数据，每个连接层再根据自己的设置（主要是MTU）分包。每个连接每次收到acknowledge和ping包后要检查等待acknowledge的发送时间，来判定是否可能丢包了需要补包。对于发送队列满的情况（有过多的未确认数据），需要返回WouldBlock，并记录上游的Stream，在后续收到 acknowledge 后转为可写，继续传输数据。
 
 ## 服务发现
 
@@ -204,6 +207,7 @@ message packet_content {
 + 节点名字（name，全局唯一）
 + 版本（version，atbus版本）
 + 业务进程自定义数据（custom_data）
++ 鉴权信息（token，列表）
 + 主机信息（host）
   + 主机名/IP（hostname，用于判定是否跨机器（Unix Socket仅本机可达））
   + 进程ID（pid，用于判定是否跨进程（直接内存访问仅同进程可达））
@@ -229,6 +233,7 @@ message packet_content {
 1. 同机器判定应为 `metadata.namespace_name` 和 `host.hostname` 均相同
 2. 同进程判定应为 `metadata.namespace_name` ， `host.hostname` 和 `host.pid` 均相同
 3. 名字规则建议遵循K8s规范 https://kubernetes.io/docs/concepts/overview/working-with-objects/names/
+4. 对于客户端（不可信网络）场景，需要由服务器接口分配 `source` 、`stream_id` 和 `token` ，客户端（不可信网络）连入时验证 `source` 和`stream_id` 对应的 `token` 。
 
 ## 语义转换建议
 
