@@ -21,6 +21,7 @@ pub mod stream_message;
 pub type FrameMessage = proto::atbus::protocol::FrameMessage;
 pub type BoxedFrameMessage = Box<FrameMessage>;
 pub type FrameMessageBody = proto::atbus::protocol::frame_message::Body;
+pub type FrameMessageHead = proto::atbus::protocol::MessageHead;
 
 pub type PingMessage = proto::atbus::protocol::PingData;
 pub type ForwardMessage = proto::atbus::protocol::ForwardData;
@@ -37,4 +38,6 @@ pub type PacketFragmentFlagType = proto::atbus::protocol::AtbusPacketFragmentFla
 pub type StreamMessage = stream_message::StreamMessage;
 pub type BoxedStreamMessage = Box<StreamMessage>;
 pub type StreamPacketFragmentMessage = stream_message::StreamPacketFragmentMessage;
+pub type StreamConnectionContext = stream_message::StreamConnectionContext;
+pub type StreamPacketFragmentPack = stream_message::StreamPacketFragmentPack;
 pub type StreamPacketFragmentUnpack = stream_message::StreamPacketFragmentUnpack;

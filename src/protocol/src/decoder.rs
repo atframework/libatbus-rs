@@ -180,7 +180,7 @@ mod test {
         let mut body = PacketMessage {
             stream_id: 1,
             stream_offset: 0,
-            content: vec![b'0'; content_length],
+            content: bytes::Bytes::new(),
             flags: PacketFlagType::ResetOffset as i32,
             padding_size: thread_rng().gen_range(0..content_length / 2) as i32,
             timepoint_microseconds: time::SystemTime::now()
@@ -188,7 +188,9 @@ mod test {
                 .unwrap()
                 .as_micros() as i64,
         };
-        thread_rng().fill(body.content.as_mut_slice());
+        let mut content_buffer = vec![b'0'; content_length];
+        thread_rng().fill(content_buffer.as_mut());
+        body.content = bytes::Bytes::from(content_buffer);
 
         let ret = FrameMessage {
             head: Some(head),

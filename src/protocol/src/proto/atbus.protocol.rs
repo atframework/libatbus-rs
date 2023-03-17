@@ -2,8 +2,8 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PacketOptions {
     /// Used to verify a untrusted endpoint
-    #[prost(bytes = "vec", optional, tag = "1")]
-    pub token: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "1")]
+    pub token: ::core::option::Option<::prost::bytes::Bytes>,
 }
 /// =================== These codes below are helper protocols to standardize RPC and tracing frame.
 /// any_value,array_value and key_value_list are just like in opentelemetry.
@@ -55,10 +55,10 @@ pub struct RpcRequest {
     pub version: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(int64, optional, tag = "2")]
     pub request_id: ::core::option::Option<i64>,
-    #[prost(bytes = "vec", optional, tag = "11")]
-    pub caller: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", optional, tag = "12")]
-    pub callee: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "11")]
+    pub caller: ::core::option::Option<::prost::bytes::Bytes>,
+    #[prost(bytes = "bytes", optional, tag = "12")]
+    pub callee: ::core::option::Option<::prost::bytes::Bytes>,
     /// RPC full name, maybe: \[DOMAIN/\]<ServiceFullName>.<MethodName>
     #[prost(string, optional, tag = "21")]
     pub rpc_name: ::core::option::Option<::prost::alloc::string::String>,
@@ -68,7 +68,7 @@ pub struct RpcRequest {
     #[prost(map = "string, bytes", tag = "31")]
     pub labels: ::std::collections::HashMap<
         ::prost::alloc::string::String,
-        ::prost::alloc::vec::Vec<u8>,
+        ::prost::bytes::Bytes,
     >,
     #[prost(map = "string, message", tag = "32")]
     pub tags: ::std::collections::HashMap<::prost::alloc::string::String, AnyValue>,
@@ -84,8 +84,8 @@ pub struct RpcResponse {
     #[prost(int32, optional, tag = "11")]
     pub response_code: ::core::option::Option<i32>,
     /// Optional response message
-    #[prost(bytes = "vec", optional, tag = "12")]
-    pub response_message: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "12")]
+    pub response_message: ::core::option::Option<::prost::bytes::Bytes>,
     /// RPC full name, maybe: \[DOMAIN/\]<ServiceFullName>.<MethodName>
     #[prost(string, optional, tag = "21")]
     pub rpc_name: ::core::option::Option<::prost::alloc::string::String>,
@@ -95,7 +95,7 @@ pub struct RpcResponse {
     #[prost(map = "string, bytes", tag = "31")]
     pub labels: ::std::collections::HashMap<
         ::prost::alloc::string::String,
-        ::prost::alloc::vec::Vec<u8>,
+        ::prost::bytes::Bytes,
     >,
     #[prost(map = "string, message", tag = "32")]
     pub tags: ::std::collections::HashMap<::prost::alloc::string::String, AnyValue>,
@@ -120,7 +120,7 @@ pub struct RpcStream {
     #[prost(map = "string, bytes", tag = "31")]
     pub labels: ::std::collections::HashMap<
         ::prost::alloc::string::String,
-        ::prost::alloc::vec::Vec<u8>,
+        ::prost::bytes::Bytes,
     >,
     #[prost(map = "string, message", tag = "32")]
     pub tags: ::std::collections::HashMap<::prost::alloc::string::String, AnyValue>,
@@ -138,8 +138,8 @@ pub struct RpcTraceSpan {
     /// This field is required.
     /// @see <https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto>
     /// @see <https://www.w3.org/TR/trace-context/#trace-id>
-    #[prost(bytes = "vec", optional, tag = "1")]
-    pub trace_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "1")]
+    pub trace_id: ::core::option::Option<::prost::bytes::Bytes>,
     /// A unique identifier for a span within a trace, assigned when the span
     /// is created. The ID is an 8-byte array. An ID with all zeroes is considered
     /// invalid.
@@ -150,8 +150,8 @@ pub struct RpcTraceSpan {
     /// This field is required.
     /// @see <https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto>
     /// @see <https://www.w3.org/TR/trace-context/#parent-id>
-    #[prost(bytes = "vec", optional, tag = "2")]
-    pub span_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "2")]
+    pub span_id: ::core::option::Option<::prost::bytes::Bytes>,
     /// trace_state conveys information about request position in multiple distributed tracing graphs.
     /// It is a trace_state in w3c-trace-context format: <https://www.w3.org/TR/trace-context/#tracestate-header>
     /// See also <https://github.com/w3c/distributed-tracing> for more details about this field.
@@ -161,8 +161,8 @@ pub struct RpcTraceSpan {
     /// field must be empty. The ID is an 8-byte array.
     /// @see <https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/trace/v1/trace.proto>
     /// @see <https://www.w3.org/TR/trace-context/#parent-id>
-    #[prost(bytes = "vec", optional, tag = "4")]
-    pub parent_span_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "bytes", optional, tag = "4")]
+    pub parent_span_id: ::core::option::Option<::prost::bytes::Bytes>,
     /// start_time_unix_nano is the start time of the span. On the client side, this is the time
     /// kept by the local machine where the span execution starts. On the server side, this
     /// is the time when the server's application handler starts running.
@@ -182,7 +182,7 @@ pub struct RpcTraceSpan {
     #[prost(map = "string, bytes", tag = "8")]
     pub labels: ::std::collections::HashMap<
         ::prost::alloc::string::String,
-        ::prost::alloc::vec::Vec<u8>,
+        ::prost::bytes::Bytes,
     >,
     #[prost(map = "string, message", tag = "9")]
     pub attributes: ::std::collections::HashMap<
@@ -238,8 +238,8 @@ pub struct ForwardData {
     pub source: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub scheme: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "4")]
-    pub address: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "bytes", tag = "4")]
+    pub address: ::prost::bytes::Bytes,
     #[prost(int32, tag = "5")]
     pub port: i32,
     #[prost(int64, tag = "6")]
@@ -267,8 +267,8 @@ pub mod packet_content {
         /// @see ATBUS_INTERNAL_PACKET_TYPE
         #[prost(int32, tag = "1")]
         pub packet_type: i32,
-        #[prost(bytes = "vec", tag = "2")]
-        pub data: ::prost::alloc::vec::Vec<u8>,
+        #[prost(bytes = "bytes", tag = "2")]
+        pub data: ::prost::bytes::Bytes,
         /// @see ATBUS_PACKET_FRAGMENT_FLAG_TYPE
         #[prost(int32, tag = "3")]
         pub fragment_flag: i32,
@@ -301,8 +301,8 @@ pub struct PacketData {
     #[prost(int64, tag = "2")]
     pub stream_offset: i64,
     /// content is encoded and crypted packet_content
-    #[prost(bytes = "vec", tag = "3")]
-    pub content: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "bytes", tag = "3")]
+    pub content: ::prost::bytes::Bytes,
     /// @see ATBUS_PACKET_FLAG_TYPE
     #[prost(int32, tag = "4")]
     pub flags: i32,
