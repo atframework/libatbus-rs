@@ -217,9 +217,11 @@ pub struct StreamAcknowledge {
     #[prost(int64, tag = "1")]
     pub stream_id: i64,
     /// All datas before this offest are received.(Not include)
+    /// offset do not include padding size
     #[prost(int64, tag = "2")]
     pub acknowledge_offset: i64,
     /// Max received offest.(Not include, this is used to detect and resend lost packets)
+    /// offset do not include padding size
     #[prost(int64, tag = "3")]
     pub received_max_offset: i64,
 }
@@ -298,6 +300,7 @@ pub struct PacketData {
     /// We can transfer different stream on different connection to improve throughput
     #[prost(int64, tag = "1")]
     pub stream_id: i64,
+    /// offset do not include padding size
     #[prost(int64, tag = "2")]
     pub stream_offset: i64,
     /// content is encoded and crypted packet_content

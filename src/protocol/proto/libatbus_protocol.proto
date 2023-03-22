@@ -71,9 +71,11 @@ message stream_acknowledge {
   int64 stream_id = 1;
 
   // All datas before this offest are received.(Not include)
+  // offset do not include padding size
   int64 acknowledge_offset = 2;
 
   // Max received offest.(Not include, this is used to detect and resend lost packets)
+  // offset do not include padding size
   int64 received_max_offset = 3;
 }
 
@@ -119,7 +121,9 @@ message packet_content {
 message packet_data {
   // Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
   // We can transfer different stream on different connection to improve throughput
-  int64 stream_id     = 1;
+  int64 stream_id = 1;
+
+  // offset do not include padding size
   int64 stream_offset = 2;
 
   // content is encoded and crypted packet_content

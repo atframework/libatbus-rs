@@ -5,11 +5,12 @@
 
 use crate::prost::{DecodeError, Message};
 
+use super::error;
 use super::frame_block;
 use super::{BoxedFrameMessage, FrameMessage};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DecoderError<'a> {
+pub enum DecoderError {
     /// Decode version
     NeedMoreDataToDecodeVersion,
     /// Decode frame length
@@ -18,10 +19,10 @@ pub enum DecoderError<'a> {
     NeedMoreDataToDecodeMessage,
     /// Decode hash
     NeedMoreDataToDecodeHash,
-    /// Invalid Hash(message buffer, cosume size)
-    InvalidHash(&'a [u8], usize),
+    /// Invalid Hash(message buffer, cosume size, expect, got)
+    InvalidHash(bytes::Bytes, usize, bytes::Bytes, bytes::Bytes),
     /// Failed to decode message(message buffer, cosume size)
-    DecodeMessageFailed(&'a [u8], usize, DecodeError),
+    DecodeMessageFailed(bytes::Bytes, usize, DecodeError),
 }
 
 struct DecoderRawLength {
@@ -31,9 +32,9 @@ struct DecoderRawLength {
     pub total_length: usize,
 }
 
-struct DecoderRawMessage<'a> {
+struct DecoderRawMessage {
     pub version: u64,
-    pub message_data: &'a [u8],
+    pub message_data: bytes::Bytes,
     pub total_length: usize,
 }
 
@@ -50,21 +51,21 @@ impl Decoder {
         Decoder {}
     }
 
-    fn try_decode_raw_length<'a, T: Into<&'a [u8]>>(
-        input: T,
-    ) -> Result<DecoderRawLength, DecoderError<'a>> {
-        let buffer: &[u8] = input.into();
+    fn try_decode_raw_length<T>(mut input: T) -> Result<DecoderRawLength, DecoderError>
+    where
+        T: bytes::Buf,
+    {
         let mut start_offset = 0;
-        let version = if let Ok(x) = frame_block::FrameBlockAlgorithm::decode_varint(&buffer) {
+        let version = if let Ok(x) = frame_block::FrameBlockAlgorithm::decode_varint(input.chunk())
+        {
+            input.advance(x.consume);
             start_offset += x.consume;
             x.value
         } else {
             return Err(DecoderError::NeedMoreDataToDecodeVersion);
         };
 
-        let message_length = if let Ok(x) =
-            frame_block::FrameBlockAlgorithm::decode_varint(&&buffer[start_offset..buffer.len()])
-        {
+        let message_length = if let Ok(x) = frame_block::FrameBlockAlgorithm::decode_varint(input) {
             start_offset += x.consume;
             x.value
         } else {
@@ -79,55 +80,63 @@ impl Decoder {
         })
     }
 
-    fn try_decode_raw_message<'a, T: Into<&'a [u8]>>(
-        input: T,
-    ) -> Result<DecoderRawMessage<'a>, DecoderError<'a>> {
-        let buffer: &[u8] = input.into();
-        let raw_length = Self::try_decode_raw_length(buffer)?;
+    fn try_decode_raw_message<T>(mut input: T) -> Result<DecoderRawMessage, DecoderError>
+    where
+        T: bytes::Buf,
+    {
+        let raw_length = Self::try_decode_raw_length(input.chunk())?;
 
         let hash_data_offset = raw_length.message_offset + (raw_length.message_length as usize);
-        if hash_data_offset > buffer.len() {
+        if hash_data_offset > input.remaining() {
             Err(DecoderError::NeedMoreDataToDecodeMessage)
-        } else if raw_length.total_length > buffer.len() {
+        } else if raw_length.total_length > input.remaining() {
             Err(DecoderError::NeedMoreDataToDecodeHash)
         } else {
-            let message_data = &buffer[raw_length.message_offset..hash_data_offset];
-            let hash_data = &buffer[hash_data_offset..raw_length.total_length];
+            let message_and_head_data = input.copy_to_bytes(hash_data_offset);
+            let hash_data = input.copy_to_bytes(raw_length.total_length - hash_data_offset);
 
-            let target_buffer_to_calc_hash = &buffer[0..hash_data_offset];
-            let expect_hash = frame_block::FrameBlockAlgorithm::hash(&target_buffer_to_calc_hash);
-            if expect_hash != hash_data {
+            let expect_hash =
+                frame_block::FrameBlockAlgorithm::hash(message_and_head_data.as_ref());
+            if expect_hash[..] != hash_data {
                 return Err(DecoderError::InvalidHash(
-                    message_data,
+                    message_and_head_data.slice(raw_length.message_offset..),
                     raw_length.total_length,
+                    bytes::Bytes::copy_from_slice(&expect_hash),
+                    hash_data,
                 ));
             }
 
             Ok(DecoderRawMessage {
                 version: raw_length.version,
-                message_data: message_data,
+                message_data: message_and_head_data.slice(raw_length.message_offset..),
                 total_length: raw_length.total_length,
             })
         }
     }
 
-    pub fn is_completed<'a, T: Into<&'a [u8]>>(&self, input: T) -> Result<(), DecoderError<'a>> {
-        let buffer: &[u8] = input.into();
-        let raw_length = Self::try_decode_raw_length(buffer)?;
+    pub fn is_completed<T>(&self, input: T) -> Result<(), DecoderError>
+    where
+        T: bytes::Buf,
+    {
+        let input_len = input.remaining();
+        let raw_length = Self::try_decode_raw_length(input)?;
 
-        if buffer.len() < raw_length.message_offset + raw_length.message_length as usize {
+        if input_len < raw_length.message_offset + raw_length.message_length as usize {
             Err(DecoderError::NeedMoreDataToDecodeMessage)
-        } else if buffer.len() < raw_length.total_length {
+        } else if input_len < raw_length.total_length {
             Err(DecoderError::NeedMoreDataToDecodeHash)
         } else {
             Ok(())
         }
     }
 
-    pub fn peek<'a, T: Into<&'a [u8]>>(&self, input: T) -> Result<DecoderFrame, DecoderError<'a>> {
+    pub fn peek<T>(&self, input: T) -> Result<DecoderFrame, DecoderError>
+    where
+        T: bytes::Buf,
+    {
         let state = Self::try_decode_raw_message(input)?;
 
-        let message = match FrameMessage::decode(state.message_data) {
+        let message = match FrameMessage::decode(state.message_data.as_ref()) {
             Ok(x) => Box::new(x),
             Err(e) => {
                 return Err(DecoderError::DecodeMessageFailed(
@@ -146,11 +155,32 @@ impl Decoder {
     }
 }
 
+impl Into<error::ProtocolError> for DecoderError {
+    fn into(self) -> error::ProtocolError {
+        match self {
+            DecoderError::NeedMoreDataToDecodeVersion => {
+                error::ProtocolError::TruncatedProtocolVersionLength
+            }
+            DecoderError::NeedMoreDataToDecodeLength => {
+                error::ProtocolError::TruncatedFrameMessageLength
+            }
+            DecoderError::NeedMoreDataToDecodeMessage => error::ProtocolError::TruncatedMessage,
+            DecoderError::NeedMoreDataToDecodeHash => error::ProtocolError::TruncatedHash,
+            DecoderError::InvalidHash(_, _, expect, got) => {
+                error::ProtocolError::ProtocolHashMismatch(expect, got)
+            }
+            DecoderError::DecodeMessageFailed(_, _, e) => error::ProtocolError::DecodeFailed(e),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::libatbus_utility;
     use crate::rand::{thread_rng, Rng};
+    use std::ops::DerefMut;
     use std::time;
+    use std::vec::Vec;
 
     use super::super::encoder::{Encoder, EncoderFrame};
     use super::super::proto;
@@ -165,7 +195,7 @@ mod test {
         let mut ret = bytes::BytesMut::with_capacity(encode_frame.get_total_length());
 
         let encoder = Encoder::new();
-        let _ = encoder.put_bytes(encode_frame, &mut ret);
+        let _ = encoder.put_block(encode_frame, &mut ret);
 
         ret.freeze()
     }
@@ -188,8 +218,8 @@ mod test {
                 .unwrap()
                 .as_micros() as i64,
         };
-        let mut content_buffer = vec![b'0'; content_length];
-        thread_rng().fill(content_buffer.as_mut());
+        let mut content_buffer: Vec<u8> = vec![b'0'; content_length];
+        thread_rng().fill(content_buffer.deref_mut());
         body.content = bytes::Bytes::from(content_buffer);
 
         let ret = FrameMessage {
@@ -307,7 +337,7 @@ mod test {
             assert!(result.is_err());
             match result {
                 Err(e) => match e {
-                    DecoderError::InvalidHash(_, _) => {}
+                    DecoderError::InvalidHash(_, _, _, _) => {}
                     _ => {
                         println!("Expect DecoderError::InvalidHash, real got {:?}", e);
                         assert!(false);

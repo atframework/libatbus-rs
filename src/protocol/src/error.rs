@@ -8,7 +8,8 @@ use std::fmt;
 use std::io;
 use std::str;
 
-use prost::{DecodeError, EncodeError};
+use crate::bytes;
+use crate::prost::{DecodeError, EncodeError};
 
 #[derive(Debug)]
 pub enum ProtocolError {
@@ -26,8 +27,12 @@ pub enum ProtocolError {
     BufferNotEnough(usize, usize),
     /// Need more data to decode message
     TruncatedMessage,
+    /// Need more data to decode hash
+    TruncatedHash,
+    /// Cache need be consume to continue this operation
+    CacheFull,
     /// Protocol hash code mismatch(expect, got)
-    ProtocolHashMismatch(Vec<u8>, Vec<u8>),
+    ProtocolHashMismatch(bytes::Bytes, bytes::Bytes),
     /// Decode failed
     DecodeFailed(DecodeError),
     /// Encode failed
@@ -35,6 +40,19 @@ pub enum ProtocolError {
 }
 
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
+
+impl ProtocolError {
+    pub fn is_truncated(&self) -> bool {
+        match self {
+            &ProtocolError::TruncatedVarint => true,
+            &ProtocolError::TruncatedFrameMessageLength => true,
+            &ProtocolError::TruncatedProtocolVersionLength => true,
+            &ProtocolError::TruncatedMessage => true,
+            &ProtocolError::TruncatedHash => true,
+            _ => false,
+        }
+    }
+}
 
 impl fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -68,6 +86,15 @@ impl fmt::Display for ProtocolError {
             ProtocolError::TruncatedMessage => {
                 write!(f, "truncated message, maybe need more data to decode it")
             }
+            ProtocolError::TruncatedHash => {
+                write!(f, "truncated hash, maybe need more data to decode it")
+            }
+            ProtocolError::CacheFull => {
+                write!(
+                    f,
+                    "cache full, need consume cache to continue this operation"
+                )
+            }
             ProtocolError::ProtocolHashMismatch(e, r) => {
                 write!(f, "protocol hash mismatch, expect: {:?}, got: {:?}", e, r)
             }
@@ -99,6 +126,10 @@ impl Error for ProtocolError {
             &ProtocolError::BufferNotEnough(_, _) => "buffer not enough",
             &ProtocolError::TruncatedMessage => {
                 "truncated message, maybe need more data to decode it"
+            }
+            &ProtocolError::TruncatedHash => "truncated hash, maybe need more data to decode it",
+            &ProtocolError::CacheFull => {
+                "cache full, need consume cache to continue this operation"
             }
             &ProtocolError::ProtocolHashMismatch(_, _) => "protocol hash mismatch",
             &ProtocolError::DecodeFailed(ref e) => &e.description(),

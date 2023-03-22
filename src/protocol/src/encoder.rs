@@ -5,8 +5,8 @@ use std::convert::From;
 
 use super::error::{ProtocolError, ProtocolResult};
 use super::frame_block;
-use super::FrameMessage;
 use super::proto;
+use super::FrameMessage;
 
 use bytes;
 use prost::Message;
@@ -29,7 +29,7 @@ impl<'a> EncoderFrame<'a> {
             ),
             varint_version_size: frame_block::FrameBlockAlgorithm::compute_varint_consume(
                 proto::atbus::protocol::AtbusProtocolConst::Version as u64,
-            )
+            ),
         }
     }
 
@@ -45,7 +45,10 @@ impl<'a> EncoderFrame<'a> {
 
     #[inline]
     pub fn get_total_length(&self) -> usize {
-        self.varint_version_size + self.varint_length_size + self.message_length + frame_block::FRAME_HASH_SIZE
+        self.varint_version_size
+            + self.varint_length_size
+            + self.message_length
+            + frame_block::FRAME_HASH_SIZE
     }
 }
 
@@ -68,17 +71,37 @@ impl Encoder {
         Encoder {}
     }
 
-    pub fn put_slice(&self, input: EncoderFrame, output: &mut [u8]) -> ProtocolResult<usize> {
-        if output.len() < input.get_total_length() {
+    #[inline]
+    pub fn get_reserve_header_length(&self) -> usize {
+        10 + 10 + frame_block::FRAME_HASH_SIZE
+    }
+
+    pub fn put_block<B>(&self, input: EncoderFrame, mut output: B) -> ProtocolResult<(usize, B)>
+    where
+        B: bytes::BufMut,
+    {
+        if output.remaining_mut() < input.get_total_length() {
             return Err(ProtocolError::BufferNotEnough(
                 input.get_total_length(),
-                output.len(),
+                output.remaining_mut(),
             ));
         }
 
-        let mut target = &mut output[0..input.varint_version_size];
+        let mut output_slice = {
+            let chunk = output.chunk_mut();
+
+            unsafe { std::slice::from_raw_parts_mut(chunk.as_mut_ptr(), chunk.len()) }
+        };
+
+        if output_slice.len() < input.get_total_length() {
+            return Err(ProtocolError::BufferNotEnough(
+                input.get_total_length(),
+                output_slice.len(),
+            ));
+        }
+
         match frame_block::FrameBlockAlgorithm::encode_varint(
-            &mut target,
+            &mut output_slice,
             proto::atbus::protocol::AtbusProtocolConst::Version as u64,
         ) {
             Ok(_) => {}
@@ -88,7 +111,7 @@ impl Encoder {
         }
 
         let mut start_offset = input.varint_version_size;
-        let mut target = &mut output[start_offset..start_offset + input.varint_length_size];
+        let mut target = &mut output_slice[start_offset..start_offset + input.varint_length_size];
         match frame_block::FrameBlockAlgorithm::encode_varint(
             &mut target,
             input.get_message_length() as u64,
@@ -101,7 +124,7 @@ impl Encoder {
         start_offset += input.varint_length_size;
 
         let mut output_message =
-            &mut output[start_offset..start_offset + input.get_message_length()];
+            &mut output_slice[start_offset..start_offset + input.get_message_length()];
         match input.get_message().encode(&mut output_message) {
             Ok(_) => {}
             Err(e) => {
@@ -110,37 +133,20 @@ impl Encoder {
         }
         start_offset += input.get_message_length();
 
-        let target = &output[0..start_offset];
-        let hash = frame_block::FrameBlockAlgorithm::hash(&target);
+        let target = &output_slice[0..start_offset];
+        let hash = frame_block::FrameBlockAlgorithm::hash(target);
 
         unsafe {
             std::ptr::copy_nonoverlapping(
                 hash.get_unchecked(0),
-                output.get_unchecked_mut(start_offset),
+                output_slice.get_unchecked_mut(start_offset),
                 frame_block::FRAME_HASH_SIZE,
             );
         }
 
-        Ok(input.get_total_length())
-    }
-
-    pub fn put<T: AsMut<[u8]>>(
-        &self,
-        input: EncoderFrame,
-        output: &mut T,
-    ) -> ProtocolResult<usize> {
-        self.put_slice(input, &mut output.as_mut())
-    }
-
-    pub fn put_bytes(
-        &self,
-        input: EncoderFrame,
-        output: &mut bytes::BytesMut,
-    ) -> ProtocolResult<usize> {
-        let old_length = output.len();
-        output.resize(old_length + input.get_total_length(), 0);
-
-        let target = &mut output[old_length..];
-        self.put_slice(input, target)
+        unsafe {
+            output.advance_mut(input.get_total_length());
+        }
+        Ok((input.get_total_length(), output))
     }
 }
