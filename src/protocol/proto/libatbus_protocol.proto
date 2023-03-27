@@ -150,7 +150,7 @@ message acknowledge_data {
 
 message message_head {
   string source                    = 1;
-  string destination               = 2;
+  string destination               = 2; // Target node name or group name
   string forward_for_source        = 3; // Always filled by relaysvr
   int64  forward_for_connection_id = 4; // Always filled by relaysvr
 }

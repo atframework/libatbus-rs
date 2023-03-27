@@ -16,13 +16,16 @@ autobenches = false # It's nightly now
 
 [lib]
 #proc-macro = true
-bench = false # It's nightly now
+bench = false  # It's nightly now
 harness = true
 
 [dependencies]
-log         = "0.*"
-env_logger  = "0.*"
-prost-build = { version = "0.*" }
+log = "0.*"
+env_logger = "0.*"
 reqwest = { version = "0.*", features = ["blocking"] }
+prost-build = { version = "0.*" }
 zip = { version = "0.*" }
 
+
+[target.'cfg(not(any(windows, macos)))'.dependencies]
+hyper-tls = { version = "0.*", features = ["vendored"] }

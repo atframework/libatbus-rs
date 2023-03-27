@@ -334,6 +334,7 @@ pub struct AcknowledgeData {
 pub struct MessageHead {
     #[prost(string, tag = "1")]
     pub source: ::prost::alloc::string::String,
+    /// Target node name or group name
     #[prost(string, tag = "2")]
     pub destination: ::prost::alloc::string::String,
     /// Always filled by relaysvr

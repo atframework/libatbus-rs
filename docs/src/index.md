@@ -26,5 +26,9 @@
 
 ## Protocol
 
-+ [libatbus协议](protocol/libatbus.md)
++ [libatbus协议](protocol/libatbus-rs.md)
 + [其他协议参考](protocol/reference.md)
+
+## 服务发现
+
++ [其他协议参考](discovery.md)
