@@ -59,6 +59,8 @@ enum ATBUS_CLOSE_REASON {
   ATBUS_CLOSE_REASON_PEER_RESET = 2;
   // Unauthorized
   ATBUS_CLOSE_REASON_UNAUTHORIZED = 3;
+  // Router not found
+  ATBUS_CLOSE_REASON_ROUTER_NOT_FOUND = 4;
 }
 
 enum ATBUS_PACKET_TYPE {
@@ -82,12 +84,13 @@ message stream_acknowledge {
 message ping_data { int64 timepoint_microseconds = 1; }
 
 message forward_data {
-  int32  version       = 1;
-  string source        = 2;
-  string scheme        = 3;
-  bytes  address       = 4;
-  int32  port          = 5;
-  int64  connection_id = 6;
+  int32               version       = 1;
+  string              source        = 2;
+  string              scheme        = 3;
+  bytes               address       = 4;
+  int32               port          = 5;
+  int64               connection_id = 6;
+  map<string, string> attributes    = 7;
 }
 
 message close_reason_data {

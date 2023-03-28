@@ -246,6 +246,11 @@ pub struct ForwardData {
     pub port: i32,
     #[prost(int64, tag = "6")]
     pub connection_id: i64,
+    #[prost(map = "string, string", tag = "7")]
+    pub attributes: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -491,6 +496,8 @@ pub enum AtbusCloseReason {
     PeerReset = 2,
     /// Unauthorized
     Unauthorized = 3,
+    /// Router not found
+    RouterNotFound = 4,
 }
 impl AtbusCloseReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -503,6 +510,7 @@ impl AtbusCloseReason {
             AtbusCloseReason::Shutdown => "ATBUS_CLOSE_REASON_SHUTDOWN",
             AtbusCloseReason::PeerReset => "ATBUS_CLOSE_REASON_PEER_RESET",
             AtbusCloseReason::Unauthorized => "ATBUS_CLOSE_REASON_UNAUTHORIZED",
+            AtbusCloseReason::RouterNotFound => "ATBUS_CLOSE_REASON_ROUTER_NOT_FOUND",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -512,6 +520,7 @@ impl AtbusCloseReason {
             "ATBUS_CLOSE_REASON_SHUTDOWN" => Some(Self::Shutdown),
             "ATBUS_CLOSE_REASON_PEER_RESET" => Some(Self::PeerReset),
             "ATBUS_CLOSE_REASON_UNAUTHORIZED" => Some(Self::Unauthorized),
+            "ATBUS_CLOSE_REASON_ROUTER_NOT_FOUND" => Some(Self::RouterNotFound),
             _ => None,
         }
     }

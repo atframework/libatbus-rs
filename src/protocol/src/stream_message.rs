@@ -195,6 +195,23 @@ impl StreamConnectionContext {
         }
     }
 
+    pub fn clear_fragment_template_forward_for(&mut self) {
+        let mut need_rebuild_predict_size = false;
+        for f in self.fragment_message_template.fragment.iter_mut() {
+            if f.forward_for.is_none() {
+                continue;
+            }
+
+            need_rebuild_predict_size = true;
+            f.forward_for = None;
+        }
+
+        if need_rebuild_predict_size {
+            // Reserve varint for fragment and data field.
+            self.fragment_message_predict_size = self.fragment_message_template.encoded_len() + 20;
+        }
+    }
+
     /// Returns tha additional padding size
     pub(crate) fn construct_frame_message(
         &mut self,

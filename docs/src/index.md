@@ -24,6 +24,12 @@
 
 + [Cargo配置参考](developer/cargo-configure.md)
 
+## 设计文档
+
++ [架构设计](design/index.md)
++ [Kubernetes支持](design/kubernetes.md)
++ [针对Lockstep场景的优化](design/lockstep.md)
+
 ## Protocol
 
 + [libatbus协议](protocol/libatbus-rs.md)

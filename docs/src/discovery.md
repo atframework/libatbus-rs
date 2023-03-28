@@ -17,9 +17,9 @@
   + 业务API版本（api_version）
   + 业务类型（kind）
   + 业务分组（group）
-  + Key-Value标签（labels，同 https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set ）
-  + Key-Value声明（annotations，同 https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ ）
-+ 入口网关（gateway，多个）
+  + Key-Value标签（labels，同 <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set> ）
+  + Key-Value声明（annotations，同 <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/> ）
++ 入口网关（gateway，多个。同一个地址也可以配置多条，匹配要求不同）
   + 优先级（priority）
   + 地址（address，格式为"协议://IP或域名:端口"，可多个）
   + 匹配要求（match）
@@ -33,7 +33,7 @@
 
 1. 同机器判定应为 `metadata.namespace_name` 和 `host.hostname` 均相同
 2. 同进程判定应为 `metadata.namespace_name` ， `host.hostname` 和 `host.pid` 均相同
-3. 名字规则建议遵循K8s规范 https://kubernetes.io/docs/concepts/overview/working-with-objects/names/
+3. 名字规则建议遵循K8s规范 <https://kubernetes.io/docs/concepts/overview/working-with-objects/names/>
 4. 对于客户端（不可信网络）场景，需要由服务器接口分配 `source` 、`stream_id` 和 `token` ，客户端（不可信网络）连入时验证 `source` 和`stream_id` 对应的 `token` 。
 
 ## 分组类型
