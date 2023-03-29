@@ -3,9 +3,14 @@ docs_dir: src
 # nav:
 #   - Home: 'README.md'
 #   - Document: index.md
+repo_url: https://github.com/atframework/libatbus-rs
 theme:
-  name: readthedocs
-  locale: zh_CN
+  name: material
+  palette:
+    scheme: slate
+  locale: zh
+  features:
+    - toc.integrate
   highlightjs: true
   hljs_languages:
     - yaml
@@ -35,5 +40,17 @@ markdown_extensions:
   - smarty
   - toc:
       permalink: True
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 plugins:
   - search
+  - offline:
+      enabled: !ENV [OFFLINE, false]
+  - awesome-pages
+  # - optimize:
+  #     enabled: !ENV [CI, false]
+
+collapse_single_pages: true

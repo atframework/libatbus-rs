@@ -30,8 +30,12 @@ Rust的劣势:
   + 利用 `bytes::Bytes` 的引用计数和Slice机制来避免每个连接单独分包时可能带来的内存拷贝。
   + 采用Offset和数据帧重叠来代替传统的基于Sequence的分包补包机制。
     + 由于每个连接单独分包，所以对相同数据，每个连接拆分的数据包个数和大小都是不一样的，不能使用传统的Sequence机制来补发。
-  + 当发现数据包已经被其他连接发送到目标了之后，可以通过RESET标记告诉该Stream要跳过已发送的数据段（offset）。
-  + 一次性收到多个包时，可以合并Acknowledge包，只发送最后一个。
+  + 多个发送Connection优化
+    + 当发现数据包已经被其他连接发送到目标了之后，可以通过RESET标记告诉该Stream要跳过已发送的数据段（offset）。
+  + 合并Acknowledge包
+    + 一次性收到多个包时，可以合并Acknowledge包，只发送最后一个。
+  + 中继转发支持
+    + Connection和(Endpoint,Stream)为M:N关系。（对于中继，可能一个连接用于转发送多个(Endpoint,Stream)对）
   + 可靠UDP实现
     + 网络层仅仅提供IO抽象，可靠UDP的重传需要搭配Stream层拆包机制。
     + 经验值
@@ -83,6 +87,7 @@ Rust的劣势:
   + 收发包数
   + 分包Fragment数
   + 平均延迟
+  + 延迟方差
   + 丢包率
   + 延迟计数:
     + 0~60ms/15ms

@@ -303,12 +303,15 @@ flowchart LR
 
 对于老版本的K8S，如果不支持 HPA v2，可以考虑使用相似的替代CRD。比如: <https://github.com/TencentBlueKing/bk-bcs/blob/master/docs/features/bcs-general-pod-autoscaler/README.md>
 
-借助 [bk-bcs][8] 模块，还能实现插入 PreDeleteHook ,以便在删除时二次确认状态数据确实已经转移完毕。针对这种场景，我们的 libatbus-rs 可以通过提供一个输出查询的HTTP server接口来实现。
-详见: <https://github.com/TencentBlueKing/bk-bcs/blob/master/docs/features/bcs-gamedeployment-operator/features/preDeleteHook/pre-delete-hook.md>
-
 如果K8S在 1.22 版本以上，我们可以通过 [pod-deletion-cost][9] 控制Pod的销毁权重。我们可以借助某些CRD通过某些方式（或提取Metric，或类似上面preDeleteHook的方式拉取数据）来动态设置 [pod-deletion-cost][9] ，然后通同样上面的方式自动HPA replicate的数量。这样可以做到精确且动态地剔除可以销毁地pod（而不仅仅是按pod index顺序）。
 
 > 详见: <https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-deletion-cost>
+
+借助 [bk-bcs][8] 模块，还能实现插入 PreDeleteHook ,以便在删除时二次确认状态数据确实已经转移完毕。针对这种场景，我们的 libatbus-rs 可以通过提供一个输出查询的HTTP server接口来实现。
+详见: <https://github.com/TencentBlueKing/bk-bcs/blob/master/docs/features/bcs-gamedeployment-operator/features/preDeleteHook/pre-delete-hook.md> 。
+同样我们也可以借助K8S自带的 [Container Lifecycle Hooks][10] 实现类似的效果。
+
+> 注: PreDeleteHook不建议设置得很长，否则有阻塞Controller的风险。
 
 [1]: https://github.com/kubernetes-sigs/custom-metrics-apiserver
 [2]: https://github.com/kubernetes-sigs/metrics-server
@@ -319,3 +322,4 @@ flowchart LR
 [7]: https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/
 [8]: https://github.com/TencentBlueKing/bk-bcs
 [9]: https://kubernetes.io/docs/reference/labels-annotations-taints/#pod-deletion-cost
+[10]: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/
