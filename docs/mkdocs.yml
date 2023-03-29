@@ -52,5 +52,4 @@ plugins:
   - awesome-pages
   # - optimize:
   #     enabled: !ENV [CI, false]
-
-collapse_single_pages: true
+# collapse_single_pages: true

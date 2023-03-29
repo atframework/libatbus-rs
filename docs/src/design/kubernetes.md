@@ -18,15 +18,15 @@
 flowchart TB
     subgraph N1[Namespace/Zone 1]
     direction LR
-    C1[Client] -->|K8S ingress/service| CR1(Client Relay Service)
-    CR1 -->|Forward| N1A[Namespace/Zone 1: App]
-    N1A -->|Forward| N1RS[Namespace/Zone 1: Relay Service]
+    C1[Client] <-->|K8S ingress/service| CR1(Client Relay Service)
+    CR1 <-->|Forward| N1A[Namespace/Zone 1: App]
+    N1A <-->|Forward| N1RS[Namespace/Zone 1: Relay Service]
     end
     subgraph N2[Namespace/Zone 2]
     direction LR
-    C2[Client] -->|K8S ingress/service| CR2(Client Relay Service)
-    CR2 -->|Forward| N2A[Namespace/Zone 2: App]
-    N2A -->|Forward| N2RS[Namespace/Zone 2: Relay Service]
+    C2[Client] <-->|K8S ingress/service| CR2(Client Relay Service)
+    CR2 <-->|Forward| N2A[Namespace/Zone 2: App]
+    N2A <-->|Forward| N2RS[Namespace/Zone 2: Relay Service]
     end
     ESI{Relay Service Ingress}
     N1RS <--> ESI
@@ -110,9 +110,9 @@ relaysvr2:
 flowchart TB
     subgraph N1[Namespace/Zone 1]
     direction LR
-    C1[Client] -->|K8S ingress/service| CR1(Client Relay Service)
-    CR1 -->|Forward| N1A[Namespace/Zone 1: App]
-    N1A -->|Forward| N1RS[Namespace/Zone 1: Relay Service]
+    C1[Client] <-->|K8S ingress/service| CR1(Client Relay Service)
+    CR1 <-->|Forward| N1A[Namespace/Zone 1: App]
+    N1A <-->|Forward| N1RS[Namespace/Zone 1: Relay Service]
     end
     subgraph N3[Namespace/Zone 3]
     direction LR
@@ -120,9 +120,9 @@ flowchart TB
     end
     subgraph N2[Namespace/Zone 2]
     direction LR
-    C2[Client] -->|K8S ingress/service| CR2(Client Relay Service)
-    CR2 -->|Forward| N2A[Namespace/Zone 2: App]
-    N2A -->|Forward| N2RS[Namespace/Zone 2: Relay Service]
+    C2[Client] <-->|K8S ingress/service| CR2(Client Relay Service)
+    CR2 <-->|Forward| N2A[Namespace/Zone 2: App]
+    N2A <-->|Forward| N2RS[Namespace/Zone 2: Relay Service]
     end
     N1RS <--> N3RS
     N2RS <--> N3RS
