@@ -25,6 +25,9 @@ Rust的劣势:
 
 ## 网络和数据帧封装
 
++ 协议和TLV
+  + 对于版本号和整体长度，采用固定包头。
+  + 对于网络协议的常用功能性TLV，直接采用Protobuf实现。
 + 多连接混流。
   + 每个连接可以根据自己的MTU策略来单独分包。
   + 利用 `bytes::Bytes` 的引用计数和Slice机制来避免每个连接单独分包时可能带来的内存拷贝。
@@ -38,8 +41,9 @@ Rust的劣势:
     + Connection和(Endpoint,Stream)为M:N关系。（对于中继，可能一个连接用于转发送多个(Endpoint,Stream)对）
   + 可靠UDP实现
     + 网络层仅仅提供IO抽象，可靠UDP的重传需要搭配Stream层拆包机制。
+    + 同QUIC，不允许Reneging。即只要Acknowledge收到了，就一定视为被正确接收。
     + 经验值
-      + 1.2倍的RTT是较优重传间隔。
+      + 1.2/1.25倍的RTT是较优重传间隔。
       + 乱序的概率较小。
       + 网络良好时，普通用户平均0.2%的丢包率
       + 4G+Wifi大部分省延迟在50-90ms
@@ -76,9 +80,13 @@ Rust的劣势:
 + 多播
   + 由于每个Stream都是单独分包的，所以多播直接挨个发送即可。
 
+关于协议层对加密和中继转发的取舍：在QUIC协议中，Stream的offset和packet number是分离的。这样的好处是分层更清晰，且对内部内容包括如何转发、如何分流的信息也是加密的。
+但是这样也有个坏处，就是它的加密协商必须是基于单个连接链路的，没有解决 [HOL Blocking][3] 问题，特别是在多Stream和Relay服务混流的场景下，由于前面的包丢失会影响后面的包的Unpack，还会加剧 [HOL Blocking][3] 。
+在我们的应用场景中（特别是针对帧同步服务），我们更希望多个Stream直接可以尽可能互相不影响。同时也尽量降低包重组的开销，所以这里设计为在Stream处理包乱序的问题，在packet处理层不做可靠性处理。在Stream端去做解密操作，每个Stream的密钥对单独管理。这样如果有中间人监控流量，可以获知流量是否是中继转发的、发给哪个Stream的。这会导致中间人能够探测协议类型，但是对内部具体内容还是不可见的。
+
 ## 可观测性
 
-可以使用 [opentelemetry][6] 的 Rust组件来上报可观测性相关的信息。
+可以使用 [opentelemetry][1] 的 [Rust组件][2] 来上报可观测性相关的信息。
 
 统计项:
 
@@ -102,3 +110,4 @@ Rust的劣势:
 
 [1]: https://opentelemetry.io/
 [2]: https://crates.io/crates/opentelemetry
+[3]: https://zh.wikipedia.org/wiki/%E9%98%9F%E5%A4%B4%E9%98%BB%E5%A1%9E
