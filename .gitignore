@@ -12,3 +12,4 @@ Cargo.lock
 # Downloaded files
 /src/protocol/prebuilt
 /docs/site
+/src/protocol/src/proto/atbus.protocol.rs
