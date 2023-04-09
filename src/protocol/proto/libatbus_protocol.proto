@@ -76,7 +76,7 @@ message stream_acknowledge {
   // offset do not include padding size
   int64 acknowledge_offset = 2;
 
-  // Max received offest.(Not include, this is used to detect and resend lost packets)
+  // Max received offest.(Not include, this is used to detect and resend lost packets. SACK)
   // offset do not include padding size
   int64 received_max_offset = 3;
 }
@@ -85,9 +85,9 @@ message ping_data {
   int64 timepoint_microseconds = 1;
 
   // Datas for PMTUD detecting(request)
-  bytes mptud_padding = 2;
+  bytes pmtud_padding = 2;
   // Recieved data length for PMTUD detecting(response)
-  int32 mptud_received_size = 3;
+  int32 pmtud_received_size = 3;
 }
 
 message forward_data {
