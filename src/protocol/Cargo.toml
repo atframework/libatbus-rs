@@ -16,14 +16,14 @@ autobenches = false # It's nightly now
 
 [lib]
 #proc-macro = true
-bench = false # It's nightly now
+bench = false  # It's nightly now
 harness = true
 
 [dependencies]
 # syn = { version = "1" }
 # quote = { version = "1" }
 prost = { version = "0.*" }
-prost-types = "0.11"
+prost-types = { version = "0.*" }
 bytes = { version = "1" }
 murmur3 = "0.*"
 rand = "0.*"
@@ -32,4 +32,3 @@ libatbus-utility = { path = "../utility" }
 [build-dependencies]
 libatbus-protoc-bin = { path = "../../tools/protoc-bin" }
 prost-build = { version = "0.*" }
-

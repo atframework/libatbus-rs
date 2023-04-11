@@ -13,3 +13,4 @@ Cargo.lock
 /src/protocol/prebuilt
 /docs/site
 /src/protocol/src/proto/atbus.protocol.rs
+/src/ffi/c/include

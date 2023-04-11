@@ -4,6 +4,6 @@ members = [
     "src/node",
     "src/endpoint",
     "src/utility",
-    "src/binding/c",
+    "src/ffi",
     "tools/protoc-bin",
 ]
