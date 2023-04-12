@@ -18,6 +18,7 @@ pub mod error;
 pub mod proto;
 pub mod stream_message;
 
+pub type ProtocolConst = proto::atbus::protocol::AtbusProtocolConst;
 pub type FrameMessage = proto::atbus::protocol::FrameMessage;
 pub type BoxedFrameMessage = Box<FrameMessage>;
 pub type FrameMessageBody = proto::atbus::protocol::frame_message::Body;
@@ -31,6 +32,9 @@ pub type PacketContentMessage = proto::atbus::protocol::PacketContent;
 pub type PacketFragmentMessage = proto::atbus::protocol::packet_content::FragmentType;
 pub type PacketOptionMessage = proto::atbus::protocol::PacketOptions;
 pub type CloseReasonMessage = proto::atbus::protocol::CloseReasonData;
+
+pub type CloseReasonCode = proto::atbus::protocol::AtbusCloseReason;
+pub type AtbusPacketType = proto::atbus::protocol::AtbusPacketType;
 
 pub type PacketFlagType = proto::atbus::protocol::AtbusPacketFlagType;
 pub type PacketFragmentFlagType = proto::atbus::protocol::AtbusPacketFragmentFlagType;

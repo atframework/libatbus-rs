@@ -22,6 +22,13 @@ use super::encoder::{Encoder, EncoderFrame};
 use super::proto;
 type InternalMessageType = proto::atbus::protocol::AtbusPacketType;
 
+// Reserve varint for packet and content field.
+// Reserve encoder length
+const FRAME_MESSAGE_PREDICT_RESERVE_SIZE: usize = 20;
+
+// Reserve varint for fragment and data field.
+const FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE: usize = 20;
+
 pub struct StreamConnectionContext {
     stream_id: i64,
     encoder: Encoder,
@@ -36,6 +43,8 @@ pub struct StreamConnectionContext {
     packet_padding_bits: Option<usize>,
 }
 
+pub type SharedStreamConnectionContext = Rc<RefCell<StreamConnectionContext>>;
+
 pub struct StreamMessage {
     pub packet_type: i32,
     pub stream_offset: i64,
@@ -48,7 +57,7 @@ pub struct StreamMessage {
     pub close_reason: Option<Box<CloseReasonMessage>>,
 
     /// Connection context
-    pub connection_context: Rc<RefCell<StreamConnectionContext>>,
+    pub connection_context: SharedStreamConnectionContext,
 }
 
 pub struct StreamPacketFragmentMessage {
@@ -129,11 +138,13 @@ impl StreamConnectionContext {
 
         // Reserve varint for packet and content field.
         // Reserve encoder length
-        ret.frame_message_predict_size =
-            ret.frame_message_template.encoded_len() + ret.encoder.get_reserve_header_length() + 20;
+        ret.frame_message_predict_size = ret.frame_message_template.encoded_len()
+            + ret.encoder.get_reserve_header_length()
+            + FRAME_MESSAGE_PREDICT_RESERVE_SIZE;
 
         // Reserve varint for fragment and data field.
-        ret.fragment_message_predict_size = ret.fragment_message_template.encoded_len() + 20;
+        ret.fragment_message_predict_size =
+            ret.fragment_message_template.encoded_len() + FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE;
 
         // Optimize padding algorithm
         if ret.packet_padding_size > 1
@@ -169,7 +180,7 @@ impl StreamConnectionContext {
         // Reserve varint for packet and content field.
         self.frame_message_predict_size = self.frame_message_template.encoded_len()
             + self.encoder.get_reserve_header_length()
-            + 20;
+            + FRAME_MESSAGE_PREDICT_RESERVE_SIZE;
 
         // Restore packet
         if let Some(rp) = restore_unpacked_frame_body {
@@ -192,7 +203,19 @@ impl StreamConnectionContext {
                 padding_size >>= 1;
             }
             self.packet_padding_bits = Some(padding_bits);
+        } else {
+            self.packet_padding_bits = None;
         }
+    }
+
+    #[inline]
+    pub fn get_padding_size(&self) -> usize {
+        self.packet_padding_size
+    }
+
+    #[inline]
+    pub fn is_fast_padding(&self) -> bool {
+        self.packet_padding_bits.is_some()
     }
 
     pub fn clear_fragment_template_forward_for(&mut self) {
@@ -208,7 +231,8 @@ impl StreamConnectionContext {
 
         if need_rebuild_predict_size {
             // Reserve varint for fragment and data field.
-            self.fragment_message_predict_size = self.fragment_message_template.encoded_len() + 20;
+            self.fragment_message_predict_size = self.fragment_message_template.encoded_len()
+                + FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE;
         }
     }
 
@@ -406,7 +430,7 @@ impl StreamConnectionContext {
             len
         } else {
             let padding_mod = if let Some(padding_bits) = self.packet_padding_bits.as_ref() {
-                len & ((1 << padding_bits) - 1)
+                (len + self.packet_padding_size - 1) & !((1 << padding_bits) - 1)
             } else {
                 len % self.packet_padding_size
             };
@@ -424,7 +448,7 @@ impl StreamConnectionContext {
             len
         } else {
             if let Some(padding_bits) = self.packet_padding_bits.as_ref() {
-                len & ((1 << padding_bits) - 1)
+                len & !((1 << padding_bits) - 1)
             } else {
                 len - len % self.packet_padding_size
             }
@@ -992,11 +1016,163 @@ impl StreamPacketFragmentMessage {
 
 #[cfg(test)]
 mod test {
-    // use super::super::error::ProtocolError;
-    // use super::FrameBlockAlgorithm;
-    // use super::VarintData;
-    // use std::io;
+    use super::super::ProtocolConst;
+    use super::*;
+    use crate::rand::{thread_rng, Rng};
+    use std::ops::DerefMut;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::vec::Vec;
+
+    fn create_context(
+        need_forward_for: bool,
+        padding_size: usize,
+    ) -> SharedStreamConnectionContext {
+        Rc::new(RefCell::new(StreamConnectionContext::new(
+            FrameMessageHead {
+                source: String::from("relaysvr:node-random-name-abcdefg"),
+                destination: String::from("server:node-random-name-abcdefg"),
+                forward_for_source: String::from("client:node-random-name-abcdefg"),
+                forward_for_connection_id: 5321,
+            },
+            0,
+            padding_size,
+            Some(PacketOptionMessage {
+                token: Some(String::from("0123456789abcdef").into_bytes().into()),
+            }),
+            HashMap::new(),
+            if need_forward_for {
+                Some(ForwardMessage {
+                    version: ProtocolConst::Version as i32,
+                    source: String::from("client:node-random-name-abcdefg"),
+                    scheme: String::from("udp"),
+                    address: String::from("fe80:820c:8210:a342:7587:26a4:b232:2e99"),
+                    port: 16359,
+                    connection_id: 5321,
+                    attributes: HashMap::new(),
+                })
+            } else {
+                None
+            },
+        )))
+    }
+
+    fn create_stream_messages(
+        ctx: &SharedStreamConnectionContext,
+        start_offset: i64,
+        message_sizes: &[i64],
+    ) -> BTreeMap<i64, Box<StreamMessage>> {
+        let mut ret = BTreeMap::new();
+        let mut offset = start_offset;
+        for s in message_sizes {
+            let mut data_buffer: Vec<u8> = vec![b'0'; *s as usize];
+            thread_rng().fill(data_buffer.deref_mut());
+
+            ret.insert(
+                offset,
+                Box::new(StreamMessage {
+                    packet_type: super::InternalMessageType::Data as i32,
+                    stream_offset: offset,
+                    data: data_buffer.into(),
+                    flags: 0,
+                    close_reason: None,
+                    connection_context: ctx.clone(),
+                }),
+            );
+
+            offset += *s;
+        }
+
+        ret
+    }
 
     #[test]
-    fn test_decode_varint_error() {}
+    fn test_padding_size() {
+        let ctx1 = create_context(false, 256);
+        let ctx2 = create_context(false, 384);
+
+        assert_eq!(ctx1.borrow().get_padding_size(), 256);
+        assert!(ctx1.borrow().is_fast_padding());
+
+        assert_eq!(ctx2.borrow().get_padding_size(), 384);
+        assert!(!ctx2.borrow().is_fast_padding());
+    }
+
+    #[test]
+    fn test_clear_fragment_template_forward_for() {
+        let ctx = create_context(true, 256);
+        assert!(ctx.borrow().fragment_message_predict_size > FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE);
+        let before_fragment_message_predict_size = ctx.borrow().fragment_message_predict_size;
+
+        assert!(ctx.borrow().fragment_message_template.fragment.len() > 0);
+        for f in ctx.borrow().fragment_message_template.fragment.iter() {
+            assert!(f.forward_for.is_some());
+        }
+
+        ctx.borrow_mut().clear_fragment_template_forward_for();
+
+        assert!(ctx.borrow().fragment_message_template.fragment.len() > 0);
+        for f in ctx.borrow().fragment_message_template.fragment.iter() {
+            assert!(f.forward_for.is_none());
+        }
+
+        assert!(ctx.borrow().fragment_message_predict_size < before_fragment_message_predict_size);
+    }
+
+    #[test]
+    fn test_resize_padding_size() {
+        let ctx = create_context(false, 0);
+        assert!(ctx.borrow().frame_message_predict_size > FRAME_MESSAGE_PREDICT_RESERVE_SIZE);
+        assert!(ctx.borrow().fragment_message_predict_size > FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE);
+
+        assert_eq!(ctx.borrow().get_padding_size(), 0);
+        assert!(!ctx.borrow().is_fast_padding());
+
+        let before_frame_message_predict_size = ctx.borrow().frame_message_predict_size;
+        ctx.borrow_mut().reset_padding_size(256);
+        let after_frame_message_predict_size = ctx.borrow().frame_message_predict_size;
+        assert!(after_frame_message_predict_size > before_frame_message_predict_size);
+
+        assert_eq!(ctx.borrow().get_padding_size(), 256);
+        assert!(ctx.borrow().is_fast_padding());
+
+        // Restore
+        ctx.borrow_mut().reset_padding_size(0);
+        assert!(ctx.borrow().frame_message_predict_size < after_frame_message_predict_size);
+        assert_eq!(
+            ctx.borrow().frame_message_predict_size,
+            before_frame_message_predict_size
+        );
+
+        assert_eq!(ctx.borrow().get_padding_size(), 0);
+        assert!(!ctx.borrow().is_fast_padding());
+    }
+
+    #[test]
+    fn test_pack_one_stream_message() {
+        let packet_size_limit = 508;
+        let start_offset = 15;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[256]);
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as i64,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 1);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(pack_result.next_packet_fragment_offset, start_offset + 256);
+    }
 }

@@ -15,7 +15,7 @@ enum ATBUS_PROTOCOL_CONST {
   ATBUS_PROTOCOL_CONST_UNKNOWN         = 0;
   ATBUS_PROTOCOL_CONST_MAGIC_NUMBER    = 16777619; // 0x1000193
   ATBUS_PROTOCOL_CONST_VERSION         = 3;
-  ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3; // minimal protocol version supported
+  ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3;        // minimal protocol version supported
 
   // Internal packet type, user custom type should be greater than this.
   ATBUS_PROTOCOL_CONST_INTERNAL_PACKET_TYPE = 100;
@@ -94,7 +94,7 @@ message forward_data {
   int32               version       = 1;
   string              source        = 2;
   string              scheme        = 3;
-  bytes               address       = 4;
+  string              address       = 4;
   int32               port          = 5;
   int64               connection_id = 6;
   map<string, string> attributes    = 7;
@@ -131,7 +131,8 @@ message packet_content {
 message packet_data {
   // Stream id is used for concurrency transfer.Just like Stream ID in HTTP/3
   // We can transfer different stream on different connection to improve throughput
-  int64 stream_id = 1;
+  // All negative stream id is reserved for internal use.
+  sint64 stream_id = 1;
 
   // offset do not include padding size
   int64 stream_offset = 2;
