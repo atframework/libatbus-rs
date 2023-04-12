@@ -8,8 +8,11 @@ use super::frame_block;
 use super::proto;
 use super::FrameMessage;
 
-use bytes;
-use prost::Message;
+use crate::bytes;
+use crate::prost::Message;
+
+const REVERSE_TOP_HEADER_LENGTH_VARINT_LENGTH: usize = 10;
+const REVERSE_TOP_HEADER_VERSION_VARINT_LENGTH: usize = 1;
 
 pub struct EncoderFrame<'a> {
     message: &'a FrameMessage,
@@ -73,7 +76,7 @@ impl Encoder {
 
     #[inline]
     pub fn get_reserve_header_length(&self) -> usize {
-        10 + 10 + frame_block::FRAME_HASH_SIZE
+        REVERSE_TOP_HEADER_VERSION_VARINT_LENGTH + REVERSE_TOP_HEADER_LENGTH_VARINT_LENGTH + frame_block::FRAME_HASH_SIZE
     }
 
     pub fn put_block<B>(&self, input: EncoderFrame, mut output: B) -> ProtocolResult<(usize, B)>
@@ -148,5 +151,23 @@ impl Encoder {
             output.advance_mut(input.get_total_length());
         }
         Ok((input.get_total_length(), output))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::prost;
+
+    #[test]
+    fn test_get_reserve_header_version_varint_length() {
+        // This should be the same as it in get_reserve_header_length
+        assert_eq!(
+            REVERSE_TOP_HEADER_VERSION_VARINT_LENGTH,
+            prost::length_delimiter_len(
+                proto::atbus::protocol::AtbusProtocolConst::Version as usize
+            )
+        );
     }
 }

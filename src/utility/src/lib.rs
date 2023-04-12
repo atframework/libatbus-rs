@@ -3,7 +3,6 @@
 
 extern crate uuid;
 extern crate bytes;
-#[macro_use]
-extern crate lazy_static;
+extern crate once_cell;
 
 pub mod unique_id;

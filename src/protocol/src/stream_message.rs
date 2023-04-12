@@ -22,13 +22,6 @@ use super::encoder::{Encoder, EncoderFrame};
 use super::proto;
 type InternalMessageType = proto::atbus::protocol::AtbusPacketType;
 
-// Reserve varint for packet and content field.
-// Reserve encoder length
-const FRAME_MESSAGE_PREDICT_RESERVE_SIZE: usize = 20;
-
-// Reserve varint for fragment and data field.
-const FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE: usize = 20;
-
 pub struct StreamConnectionContext {
     stream_id: i64,
     encoder: Encoder,
@@ -138,13 +131,10 @@ impl StreamConnectionContext {
 
         // Reserve varint for packet and content field.
         // Reserve encoder length
-        ret.frame_message_predict_size = ret.frame_message_template.encoded_len()
-            + ret.encoder.get_reserve_header_length()
-            + FRAME_MESSAGE_PREDICT_RESERVE_SIZE;
+        ret.frame_message_predict_size =
+            ret.frame_message_template.encoded_len() + ret.encoder.get_reserve_header_length();
 
-        // Reserve varint for fragment and data field.
-        ret.fragment_message_predict_size =
-            ret.fragment_message_template.encoded_len() + FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE;
+        ret.fragment_message_predict_size = ret.fragment_message_template.encoded_len();
 
         // Optimize padding algorithm
         if ret.packet_padding_size > 1
@@ -178,9 +168,8 @@ impl StreamConnectionContext {
         }
 
         // Reserve varint for packet and content field.
-        self.frame_message_predict_size = self.frame_message_template.encoded_len()
-            + self.encoder.get_reserve_header_length()
-            + FRAME_MESSAGE_PREDICT_RESERVE_SIZE;
+        self.frame_message_predict_size =
+            self.frame_message_template.encoded_len() + self.encoder.get_reserve_header_length();
 
         // Restore packet
         if let Some(rp) = restore_unpacked_frame_body {
@@ -230,9 +219,7 @@ impl StreamConnectionContext {
         }
 
         if need_rebuild_predict_size {
-            // Reserve varint for fragment and data field.
-            self.fragment_message_predict_size = self.fragment_message_template.encoded_len()
-                + FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE;
+            self.fragment_message_predict_size = self.fragment_message_template.encoded_len();
         }
     }
 
@@ -457,32 +444,58 @@ impl StreamConnectionContext {
 }
 
 impl StreamMessage {
-    pub fn predict_frame_size(&self, stream_offset: i64, timepoint_microseconds: i64) -> usize {
-        self.connection_context.borrow().frame_message_predict_size
+    pub fn predict_frame_size(
+        &self,
+        stream_offset: i64,
+        timepoint_microseconds: i64,
+        close_reason: &Option<Box<CloseReasonMessage>>,
+    ) -> (usize, usize) {
+        let header_len = self.connection_context.borrow().frame_message_predict_size
             + prost::length_delimiter_len(if stream_offset > 0 {
                 stream_offset as usize
             } else {
                 0
             })
+            - 1
             + prost::length_delimiter_len(if timepoint_microseconds > 0 {
                 timepoint_microseconds as usize
             } else {
                 0
             })
+            - 1;
+
+        let fragment_header_len = self.predict_fragment_size(&close_reason);
+
+        // Reserve tag and length varint for packet_data's content field.
+        // Reserve varint for encoder's length header.
+        let max_fragment_data_length_size =
+            prost::length_delimiter_len(header_len + fragment_header_len + self.data.len() + 1);
+        (
+            header_len + max_fragment_data_length_size + max_fragment_data_length_size + 1,
+            fragment_header_len,
+        )
     }
 
-    pub fn predict_fragment_size(&self, close_reason: &Option<Box<CloseReasonMessage>>) -> usize {
+    fn predict_fragment_size(&self, close_reason: &Option<Box<CloseReasonMessage>>) -> usize {
+        let header_len;
         if let Some(cr) = close_reason {
             let encoded_len_of_cr = cr.encoded_len();
+            header_len = self.connection_context.borrow().fragment_message_predict_size
             // Key tag use last 3 bits of first byte as wire type.
-            self.connection_context.borrow().fragment_message_predict_size
-                + prost::length_delimiter_len(7 * 8) // 7 is the tag of close_reason
-                + prost::length_delimiter_len(encoded_len_of_cr)
+            + prost::length_delimiter_len(7 * 8) // 7 is the tag of close_reason
+            + prost::length_delimiter_len(encoded_len_of_cr);
         } else {
-            self.connection_context
+            header_len = self
+                .connection_context
                 .borrow()
-                .fragment_message_predict_size
+                .fragment_message_predict_size;
         }
+
+        // Reserve tag and varint for fragment's data field.
+        // Reserve varint of fragment field(already has 1 before).
+        let max_fragment_data_length_size =
+            prost::length_delimiter_len(self.data.len() + header_len + 1);
+        header_len + max_fragment_data_length_size + max_fragment_data_length_size
     }
 
     pub fn get_message_length(&self) -> usize {
@@ -646,9 +659,11 @@ impl StreamMessage {
             )));
         }
 
-        let frame_head_reserve_size =
-            self.predict_frame_size(packer.next_packet_fragment_offset, timepoint_microseconds);
-        let fragment_head_reserve_size = self.predict_fragment_size(&self.close_reason);
+        let (frame_head_reserve_size, fragment_head_reserve_size) = self.predict_frame_size(
+            packer.next_packet_fragment_offset,
+            timepoint_microseconds,
+            &self.close_reason,
+        );
 
         if packet_size_limit < frame_head_reserve_size + fragment_head_reserve_size {
             return Err(ProtocolError::IoError(io::Error::from(
@@ -1019,7 +1034,9 @@ mod test {
     use super::super::ProtocolConst;
     use super::*;
     use crate::rand::{thread_rng, Rng};
+    use std::cell::RefCell;
     use std::ops::DerefMut;
+    use std::rc::Rc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::vec::Vec;
 
@@ -1100,7 +1117,7 @@ mod test {
     #[test]
     fn test_clear_fragment_template_forward_for() {
         let ctx = create_context(true, 256);
-        assert!(ctx.borrow().fragment_message_predict_size > FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE);
+        assert!(ctx.borrow().fragment_message_predict_size >= 115);
         let before_fragment_message_predict_size = ctx.borrow().fragment_message_predict_size;
 
         assert!(ctx.borrow().fragment_message_template.fragment.len() > 0);
@@ -1108,7 +1125,9 @@ mod test {
             assert!(f.forward_for.is_some());
         }
 
-        ctx.borrow_mut().clear_fragment_template_forward_for();
+        ctx.try_borrow_mut()
+            .unwrap()
+            .clear_fragment_template_forward_for();
 
         assert!(ctx.borrow().fragment_message_template.fragment.len() > 0);
         for f in ctx.borrow().fragment_message_template.fragment.iter() {
@@ -1116,19 +1135,20 @@ mod test {
         }
 
         assert!(ctx.borrow().fragment_message_predict_size < before_fragment_message_predict_size);
+        assert!(ctx.borrow().fragment_message_predict_size >= 26);
     }
 
     #[test]
     fn test_resize_padding_size() {
         let ctx = create_context(false, 0);
-        assert!(ctx.borrow().frame_message_predict_size > FRAME_MESSAGE_PREDICT_RESERVE_SIZE);
-        assert!(ctx.borrow().fragment_message_predict_size > FRAGMENT_MESSAGE_PREDICT_RESERVE_SIZE);
+        assert!(ctx.borrow().frame_message_predict_size >= 129);
+        assert!(ctx.borrow().fragment_message_predict_size >= 26);
 
         assert_eq!(ctx.borrow().get_padding_size(), 0);
         assert!(!ctx.borrow().is_fast_padding());
 
         let before_frame_message_predict_size = ctx.borrow().frame_message_predict_size;
-        ctx.borrow_mut().reset_padding_size(256);
+        ctx.try_borrow_mut().unwrap().reset_padding_size(256);
         let after_frame_message_predict_size = ctx.borrow().frame_message_predict_size;
         assert!(after_frame_message_predict_size > before_frame_message_predict_size);
 
@@ -1136,7 +1156,7 @@ mod test {
         assert!(ctx.borrow().is_fast_padding());
 
         // Restore
-        ctx.borrow_mut().reset_padding_size(0);
+        ctx.try_borrow_mut().unwrap().reset_padding_size(0);
         assert!(ctx.borrow().frame_message_predict_size < after_frame_message_predict_size);
         assert_eq!(
             ctx.borrow().frame_message_predict_size,
@@ -1151,20 +1171,62 @@ mod test {
     fn test_pack_one_stream_message() {
         let packet_size_limit = 508;
         let start_offset = 15;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length = 256;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[256]);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
 
         let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .first_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        {
+            let mut clone_framgment_message = ctx.borrow().fragment_message_template.clone();
+            clone_framgment_message.fragment[0].data =
+                messages.first_key_value().unwrap().1.data.clone();
+            let calc_fragment_size = clone_framgment_message.encoded_len();
+            assert!(fragment_head_reserve_size + data_length as usize >= calc_fragment_size);
+            assert!(fragment_head_reserve_size + data_length as usize <= calc_fragment_size + 1);
+
+            let mut clone_frame_message = ctx.borrow().frame_message_template.clone();
+            if let Some(b) = clone_frame_message.body.as_mut() {
+                if let FrameMessageBody::Packet(ref mut p) = b {
+                    p.content = clone_framgment_message.encode_to_vec().into();
+                    assert_eq!(calc_fragment_size, p.content.len());
+                }
+            }
+            let calc_frame_size = clone_frame_message.encoded_len();
+            let variable_varint_addon = prost::encoding::encoded_len_varint(start_offset as u64)
+                - 1
+                + prost::encoding::encoded_len_varint(timepoint as u64)
+                - 1;
+
+            let encoder_reserve_length = ctx.borrow().encoder.get_reserve_header_length();
+
+            assert!(
+                frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                    >= calc_frame_size + variable_varint_addon + encoder_reserve_length
+            );
+            assert!(
+                frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                    <= calc_frame_size + variable_varint_addon + encoder_reserve_length + 4
+            );
+        }
 
         let pack_result = StreamMessage::pack(
             &messages,
             &mut output,
             start_offset,
             packet_size_limit,
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_micros() as i64,
+            timepoint,
         );
 
         assert!(pack_result.is_ok());
@@ -1173,6 +1235,14 @@ mod test {
         assert_eq!(pack_result.frame_count, 1);
         assert_eq!(pack_result.consume_size, output.len());
         assert!(pack_result.unfinished_packet_fragment_data.is_none());
-        assert_eq!(pack_result.next_packet_fragment_offset, start_offset + 256);
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + data_length
+        );
+
+        assert!(
+            frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                >= pack_result.consume_size
+        );
     }
 }
