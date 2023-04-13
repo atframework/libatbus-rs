@@ -20,7 +20,10 @@
   + API控制服务发现
   + 注册到ETCD（内置）
 
-## cargo 配置
+
+## For Developer
+
+### cargo 配置
 
 File path `~/.cargo/config.toml` or `~/.cargo/config`
 
@@ -71,6 +74,16 @@ rev = "…"            # revision for the git repository
 ```
 
 https://doc.rust-lang.org/cargo/reference/config.html
+
+### 压力测试
+
+```bash
+
+# 关闭对比报告
+cargo install cargo-criterion
+
+cargo criterion --plotting-backend disabled -- --discard-baseline
+```
 
 ## Protocol
 

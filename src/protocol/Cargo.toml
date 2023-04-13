@@ -16,7 +16,7 @@ autobenches = false # It's nightly now
 
 [lib]
 #proc-macro = true
-bench = false  # It's nightly now
+# bench = true   # It's nightly now
 harness = true
 
 [dependencies]
@@ -33,3 +33,11 @@ libatbus-utility = { path = "../utility" }
 [build-dependencies]
 libatbus-protoc-bin = { path = "../../tools/protoc-bin" }
 prost-build = { version = "0.*" }
+
+[dev-dependencies]
+criterion = { version = "0.*", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmark-libatbus-protocol"
+harness = false
+path = "benches/main.rs"

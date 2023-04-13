@@ -1,69 +1,118 @@
-#![cfg(test)]
-
-extern crate bytes;
-extern crate rand;
-extern crate test;
+// Copyright 2023 atframework
+// Licensed under the MIT licenses.
 
 use bytes::BytesMut;
+use prost::Message;
 use rand::{thread_rng, Rng};
-use test::Bencher;
+use std::collections::HashMap;
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use criterion::{black_box, criterion_group, Criterion, Throughput};
 
 use ::libatbus_protocol::encoder::{Encoder, EncoderFrame};
-//use ::libatbus_protocol:error::ProtocolError;
-use ::libatbus_protocol::proto::libatbus_protocol;
-//use ::libatbus_protocol::decoder::Decoder;
-use ::libatbus_protocol::FrameMessage;
+use ::libatbus_protocol::{
+    FrameMessage, FrameMessageBody, FrameMessageHead, PacketContentMessage, PacketFlagType,
+    PacketFragmentFlagType, PacketFragmentMessage, PacketMessage,
+};
 
-fn generate_uuid() -> Vec<u8> {
-    let mut ret = Vec::new();
-    ret.resize(32, 0 as u8);
-    thread_rng().fill(&mut ret[16..]);
-    for i in 0..16 {
-        let c = ret[i + 16];
-        let lc = c % 16;
-        let hc = c / 16;
-        ret[i << 1] = if lc >= 10 {
-            lc - 10 + 'a' as u8
-        } else {
-            lc + '0' as u8
-        };
-        ret[(i << 1) + 1] = if hc >= 10 {
-            hc - 10 + 'a' as u8
-        } else {
-            hc + '0' as u8
-        };
-    }
-
-    ret
-}
+use super::utility::generate_uuid;
 
 fn generate_packet_message(content_length: usize) -> FrameMessage {
-    let mut ret = FrameMessage::new();
-    ret.mut_head().set_source(generate_uuid());
-    ret.mut_head().set_destination(generate_uuid());
-    ret.mut_head()
-        .set_version(libatbus_protocol::ATBUS_PROTOCOL_CONST::ATBUS_PROTOCOL_VERSION as i32);
+    let mut user_data: Vec<u8> = vec![0; content_length];
+    thread_rng().fill(user_data.as_mut_slice());
 
-    let body = ret.mut_packet();
-    body.set_packet_sequence(123);
-    body.set_packet_acknowledge(456);
-    body.set_flags(
-        libatbus_protocol::ATBUS_PACKET_FLAG_TYPE::ATBUS_PACKET_FLAG_RESET_SEQUENCE as i32,
-    );
-    body.mut_content().resize(content_length, 0);
-    thread_rng().fill(body.mut_content().as_mut_slice());
+    let content = PacketContentMessage {
+        fragment: vec![PacketFragmentMessage {
+            packet_type: 0,
+            data: user_data.into(),
+            fragment_flag: PacketFragmentFlagType::HasMore as i32,
+            options: None,
+            labels: HashMap::new(),
+            forward_for: None,
+            close_reason: None,
+        }],
+    };
 
-    ret
+    FrameMessage {
+        head: Some(FrameMessageHead {
+            source: generate_uuid(),
+            destination: generate_uuid(),
+            forward_for_source: String::default(),
+            forward_for_connection_id: 0,
+        }),
+        body: Some(FrameMessageBody::Packet(PacketMessage {
+            stream_id: 123,
+            stream_offset: 456,
+            content: content.encode_to_vec().into(),
+            flags: PacketFlagType::ResetOffset as i32,
+            padding_size: 32,
+            timepoint_microseconds: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as i64,
+        })),
+    }
 }
 
-#[bench]
-fn encoder_message_128B(b: &mut Bencher) {
-    let tmpl = generate_packet_message(128);
+fn encoder_message(c: &mut Criterion, group_name: &str, message_size: usize) {
+    {
+        let tmpl = generate_packet_message(message_size);
+        let mut small_group = c.benchmark_group(format!("{}(QPS)", group_name));
+        small_group.throughput(Throughput::Elements(1));
 
-    b.iter(|| {
-        let frame = EncoderFrame::new(&tmpl);
-        let encoder = Encoder::new();
-        let output = BytesMut::with_capacity(frame.get_total_length());
-        encoder.put_bytes(frame, &mut output).unwrap()
-    })
+        small_group.bench_function(format!("message size: {}", message_size).as_str(), |b| {
+            b.iter(|| {
+                let frame = EncoderFrame::new(&tmpl);
+                let encoder = Encoder::new();
+                let output = black_box(BytesMut::with_capacity(frame.get_total_length()));
+                let _ = encoder.put_block(frame, output);
+                1
+            })
+        });
+    }
+
+    {
+        let tmpl = generate_packet_message(message_size);
+        let mut small_group = c.benchmark_group(format!("{}(Throughput)", group_name));
+        small_group.throughput(Throughput::Bytes(message_size as u64));
+
+        small_group.bench_function(format!("message size: {}", message_size).as_str(), |b| {
+            b.iter(|| {
+                let frame = EncoderFrame::new(&tmpl);
+                let encoder = Encoder::new();
+                let output = black_box(BytesMut::with_capacity(frame.get_total_length()));
+                let _ = encoder.put_block(frame, output);
+                message_size
+            })
+        });
+    }
+}
+
+fn encoder_message_small(c: &mut Criterion) {
+    encoder_message(c, "Encoder -> encode small message", 64);
+    encoder_message(c, "Encoder -> encode small message", 128);
+    encoder_message(c, "Encoder -> encode small message", 256);
+    encoder_message(c, "Encoder -> encode small message", 400);
+    encoder_message(c, "Encoder -> encode small message", 1024);
+}
+
+fn encoder_message_large(c: &mut Criterion) {
+    encoder_message(c, "Encoder -> encode large message", 4096);
+    encoder_message(c, "Encoder -> encode large message", 16000);
+    encoder_message(c, "Encoder -> encode large message", 65000);
+}
+
+criterion_group! {
+    name = encoder_small;
+    config = Criterion::default();
+        // .warm_up_time(Duration::from_micros(256))
+    targets = encoder_message_small
+}
+
+criterion_group! {
+    name = encoder_large;
+    config = Criterion::default();
+        // .warm_up_time(Duration::from_micros(256));
+    targets = encoder_message_large
 }
