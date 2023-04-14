@@ -73,8 +73,8 @@ impl Decoder {
         };
 
         Ok(DecoderRawLength {
-            version: version,
-            message_length: message_length,
+            version,
+            message_length,
             message_offset: start_offset,
             total_length: start_offset + (message_length as usize) + frame_block::FRAME_HASH_SIZE,
         })
@@ -148,7 +148,7 @@ impl Decoder {
         };
 
         Ok(DecoderFrame {
-            message: message,
+            message,
             consume_length: state.total_length,
             version: state.version,
         })

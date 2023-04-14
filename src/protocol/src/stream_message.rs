@@ -99,7 +99,7 @@ impl StreamConnectionContext {
         forward_for: Option<ForwardMessage>,
     ) -> Self {
         let mut ret = StreamConnectionContext {
-            stream_id: stream_id,
+            stream_id,
             encoder: Encoder::new(),
             frame_message_template: FrameMessage {
                 head: Some(head),
@@ -266,8 +266,8 @@ impl StreamConnectionContext {
                     let padding_ceil = self.padding_len_ceil(fragment_data.data.len());
                     if padding_ceil > fragment_data.data.len() {
                         // TODO better random filled value
-                        fragment_data.data.resize(padding_ceil, 0);
                         padding_size = (padding_ceil - fragment_data.data.len()) as i32;
+                        fragment_data.data.resize(padding_ceil, 0);
                     }
                 }
 
@@ -417,16 +417,15 @@ impl StreamConnectionContext {
         if self.packet_padding_size <= 1 {
             len
         } else {
-            let padding_mod = if let Some(padding_bits) = self.packet_padding_bits.as_ref() {
+            if let Some(padding_bits) = self.packet_padding_bits.as_ref() {
                 (len + self.packet_padding_size - 1) & !((1 << padding_bits) - 1)
             } else {
-                len % self.packet_padding_size
-            };
-
-            if padding_mod == 0 {
-                len
-            } else {
-                len + self.packet_padding_size - padding_mod
+                let padding_mod = len % self.packet_padding_size;
+                if padding_mod == 0 {
+                    len
+                } else {
+                    len + self.packet_padding_size - padding_mod
+                }
             }
         }
     }
@@ -666,7 +665,9 @@ impl StreamMessage {
             &self.close_reason,
         );
 
-        if packet_size_limit < frame_head_reserve_size + fragment_head_reserve_size {
+        let padding_size = self.connection_context.borrow().get_padding_size();
+
+        if packet_size_limit < frame_head_reserve_size + fragment_head_reserve_size + padding_size {
             return Err(ProtocolError::IoError(io::Error::from(
                 io::ErrorKind::InvalidData,
             )));
@@ -695,8 +696,8 @@ impl StreamMessage {
                     + fragment_head_reserve_size;
 
                 // If current message need reset and it's the first fragment, do not reuse the previous frame.
-                if unfinished_fragment_len_with_headers >= packet_size_limit
-                    || fragment_max_data_len <= upf.data.len()
+                if unfinished_fragment_len_with_headers + padding_size >= packet_size_limit
+                    || fragment_max_data_len <= upf.data.len() + padding_size
                     || ((self.flags & PacketFlagType::ResetOffset as i32) != 0
                         && packer.next_packet_fragment_offset == self.get_message_begin_offset())
                     || force_packet_reset
@@ -714,7 +715,8 @@ impl StreamMessage {
                 // Full and exit
                 if next_output.remaining_mut()
                     <= fragment_head_reserve_size
-                        + fragment_max_data_len
+                        + frame_head_reserve_size
+                        + padding_size
                         + self.padding_len_ceil(upf.data.len())
                 {
                     return Ok((consume_size, next_output));
@@ -723,9 +725,9 @@ impl StreamMessage {
                 let left_output_data_len = self.padding_len_floor(
                     next_output.remaining_mut()
                         - fragment_head_reserve_size
-                        - fragment_max_data_len,
+                        - frame_head_reserve_size,
                 );
-                if left_output_data_len <= upf.data.len() {
+                if left_output_data_len <= upf.data.len() + padding_size {
                     return Ok((consume_size, next_output));
                 }
 
@@ -760,13 +762,13 @@ impl StreamMessage {
                         )?;
                 } else {
                     // Finish previous
+                    need_finish_previous_package = true;
                     if upf.packet_flags
                         != self.get_fragment_packet_flag(
                             packer.next_packet_fragment_offset,
                             current_fragment_available_data_len,
                         )
                     {
-                        need_finish_previous_package = true;
                         continue;
                     }
 
@@ -784,7 +786,8 @@ impl StreamMessage {
                 }
             } else {
                 // Full and exit
-                if next_output.remaining_mut() <= fragment_head_reserve_size + fragment_max_data_len
+                if next_output.remaining_mut()
+                    <= fragment_head_reserve_size + frame_head_reserve_size
                 {
                     return Ok((consume_size, next_output));
                 }
@@ -793,7 +796,7 @@ impl StreamMessage {
                 let left_output_data_len = self.padding_len_floor(
                     next_output.remaining_mut()
                         - fragment_head_reserve_size
-                        - fragment_max_data_len,
+                        - frame_head_reserve_size,
                 );
                 if left_output_data_len <= 0 {
                     return Ok((consume_size, next_output));
@@ -827,6 +830,7 @@ impl StreamMessage {
                             current_fragment_available_data_len,
                             force_packet_reset,
                         )?;
+                    need_finish_previous_package = true;
                 }
             }
         }
@@ -1085,8 +1089,13 @@ mod test {
         let mut ret = BTreeMap::new();
         let mut offset = start_offset;
         for s in message_sizes {
-            let mut data_buffer: Vec<u8> = vec![b'0'; *s as usize];
-            thread_rng().fill(data_buffer.deref_mut());
+            let data_buffer: Vec<u8> = if *s > 0 {
+                let mut res = vec![b'0'; *s as usize];
+                thread_rng().fill(res.deref_mut());
+                res
+            } else {
+                Vec::new()
+            };
 
             ret.insert(
                 offset,
@@ -1172,6 +1181,155 @@ mod test {
     }
 
     #[test]
+    fn test_pack_empty_stream_message() {
+        let packet_size_limit = 508;
+        let start_offset = 15;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let messages: BTreeMap<i64, Box<StreamMessage>> = BTreeMap::new();
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 0);
+        assert_eq!(pack_result.consume_size, 0);
+        assert_eq!(pack_result.next_packet_fragment_offset, start_offset);
+    }
+
+    #[test]
+    fn test_pack_unfinish_stream_message() {
+        let packet_size_limit = 508;
+        let start_offset = 15;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length = 256;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .first_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        let mut output_buffer = [0 as u8; 4096];
+        let output_len =
+            frame_head_reserve_size + fragment_head_reserve_size + data_length as usize - 50;
+        let mut output: &mut [u8] = &mut output_buffer[0..output_len];
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 1);
+        assert!(pack_result.consume_size > 0);
+        assert!(pack_result.consume_size <= output_len);
+        assert!(pack_result.next_packet_fragment_offset > start_offset);
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+
+        // Decode
+        let decoder = Decoder::new();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output_buffer[..pack_result.consume_size],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data = unpack_result.unwrap();
+
+        assert_eq!(pack_result.consume_size, unpack_data.1);
+
+        // Check data
+        {
+            let origin_frame_message = messages.first_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                origin_frame_message.get_message_begin_offset()
+            );
+
+            assert_eq!(unpack_data.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data.0.packet_flag, origin_frame_message.flags);
+
+            assert_eq!(1, unpack_data.0.fragment.len());
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                unpack_data.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message = unpack_data.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message.packet_type,
+                origin_frame_message.packet_type
+            );
+
+            assert_eq!(
+                unpack_frame_message.fragment_flag,
+                PacketFragmentFlagType::HasMore as i32
+            );
+            assert_eq!(
+                unpack_frame_message.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(
+                unpack_frame_message.data,
+                origin_frame_message
+                    .data
+                    .slice(..unpack_frame_message.data.len())
+            );
+            assert!(unpack_frame_message.data.len() < origin_frame_message.data.len());
+
+            assert_eq!(
+                pack_result.next_packet_fragment_offset,
+                start_offset + unpack_frame_message.data.len() as i64
+            );
+        }
+    }
+
+    #[test]
     fn test_pack_one_stream_message() {
         let packet_size_limit = 508;
         let start_offset = 15;
@@ -1251,14 +1409,35 @@ mod test {
 
         // Decode
         let decoder = Decoder::new();
-        let unpack_result =
-            StreamPacketFragmentMessage::unpack_from_buffer(&decoder, &output[..], Some(375));
-        assert!(unpack_result.is_err());
-        if let Err(e) = unpack_result {
-            if let ProtocolError::IoError(io_error) = e {
-                assert_eq!(io_error.kind(), io::ErrorKind::InvalidInput);
-            } else {
-                assert!(false);
+
+        // Stream id not matched
+        {
+            let unpack_result =
+                StreamPacketFragmentMessage::unpack_from_buffer(&decoder, &output[..], Some(375));
+            assert!(unpack_result.is_err());
+            if let Err(e) = unpack_result {
+                if let ProtocolError::IoError(io_error) = e {
+                    assert_eq!(io_error.kind(), io::ErrorKind::InvalidInput);
+                } else {
+                    assert!(false);
+                }
+            }
+        }
+
+        // Length not enough
+        {
+            let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+                &decoder,
+                &output[..output.len() - 1],
+                Some(ctx.borrow().stream_id),
+            );
+            assert!(unpack_result.is_err());
+            if let Err(e) = unpack_result {
+                if let ProtocolError::TruncatedHash = e {
+                    assert!(true);
+                } else {
+                    assert!(false);
+                }
             }
         }
 
@@ -1344,6 +1523,1109 @@ mod test {
                 ctx.borrow().fragment_message_template.fragment[0].options
             );
             assert_eq!(unpack_frame_message.data, origin_frame_message.data);
+        }
+    }
+
+    // pack middle message
+    #[test]
+    fn test_pack_middle_stream_message() {
+        let packet_size_limit = 508;
+        let start_offset = 15;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let already_sent_data_length = 153;
+        let data_length = 256;
+        let ctx = create_context(false, 32);
+        let messages =
+            create_stream_messages(&ctx, start_offset, &[already_sent_data_length, data_length]);
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .last_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        {
+            let mut clone_framgment_message = ctx.borrow().fragment_message_template.clone();
+            clone_framgment_message.fragment[0].data =
+                messages.last_key_value().unwrap().1.data.clone();
+            let calc_fragment_size = clone_framgment_message.encoded_len();
+            assert!(fragment_head_reserve_size + data_length as usize >= calc_fragment_size);
+            assert!(fragment_head_reserve_size + data_length as usize <= calc_fragment_size + 1);
+
+            let mut clone_frame_message = ctx.borrow().frame_message_template.clone();
+            if let Some(b) = clone_frame_message.body.as_mut() {
+                if let FrameMessageBody::Packet(ref mut p) = b {
+                    p.content = clone_framgment_message.encode_to_vec().into();
+                    assert_eq!(calc_fragment_size, p.content.len());
+                }
+            }
+            let calc_frame_size = clone_frame_message.encoded_len();
+            let variable_varint_addon = prost::encoding::encoded_len_varint(start_offset as u64)
+                - 1
+                + prost::encoding::encoded_len_varint(timepoint as u64)
+                - 1;
+
+            let encoder_reserve_length = ctx.borrow().encoder.get_reserve_header_length();
+
+            assert!(
+                frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                    >= calc_frame_size + variable_varint_addon + encoder_reserve_length
+            );
+            assert!(
+                frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                    <= calc_frame_size + variable_varint_addon + encoder_reserve_length + 4
+            );
+        }
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset + already_sent_data_length,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 1);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + already_sent_data_length + data_length
+        );
+
+        assert!(
+            frame_head_reserve_size + fragment_head_reserve_size + data_length as usize
+                >= pack_result.consume_size
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        // Stream id not matched
+        {
+            let unpack_result =
+                StreamPacketFragmentMessage::unpack_from_buffer(&decoder, &output[..], Some(375));
+            assert!(unpack_result.is_err());
+            if let Err(e) = unpack_result {
+                if let ProtocolError::IoError(io_error) = e {
+                    assert_eq!(io_error.kind(), io::ErrorKind::InvalidInput);
+                } else {
+                    assert!(false);
+                }
+            }
+        }
+
+        // Length not enough
+        {
+            let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+                &decoder,
+                &output[..output.len() - 1],
+                Some(ctx.borrow().stream_id),
+            );
+            assert!(unpack_result.is_err());
+            if let Err(e) = unpack_result {
+                if let ProtocolError::TruncatedHash = e {
+                    assert!(true);
+                } else {
+                    assert!(false);
+                }
+            }
+        }
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data = unpack_result.unwrap();
+        assert_eq!(pack_result.consume_size, unpack_data.1);
+
+        // Check data
+        {
+            let origin_frame_message = messages.last_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().forward_for_source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_source
+            );
+            assert_eq!(
+                unpack_data
+                    .0
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id
+            );
+
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                origin_frame_message.get_message_begin_offset()
+            );
+            assert_eq!(unpack_data.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data.0.packet_flag, origin_frame_message.flags);
+
+            assert_eq!(1, unpack_data.0.fragment.len());
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                unpack_data.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message = unpack_data.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message.packet_type,
+                origin_frame_message.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(unpack_frame_message.data, origin_frame_message.data);
+        }
+    }
+
+    // Split into multiple frame
+    #[test]
+    fn test_pack_stream_message_into_multiple_fragments() {
+        let start_offset = 15;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length = 256;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .first_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        let packet_size_limit =
+            frame_head_reserve_size + fragment_head_reserve_size + data_length as usize - 20;
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 2);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + data_length
+        );
+
+        assert!(
+            2 * (frame_head_reserve_size + fragment_head_reserve_size) + data_length as usize
+                >= pack_result.consume_size
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        // Length not enough
+        {
+            let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+                &decoder,
+                &output[..output.len() - 1],
+                Some(ctx.borrow().stream_id),
+            );
+            assert!(unpack_result.is_ok());
+            let unpack_data = unpack_result.unwrap();
+            assert!(pack_result.consume_size > unpack_data.1);
+            assert_eq!(unpack_data.0.fragment.len(), 1);
+        }
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_frame1 = unpack_result.unwrap();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[unpack_frame1.1..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_frame2 = unpack_result.unwrap();
+
+        assert_eq!(pack_result.consume_size, unpack_frame1.1 + unpack_frame2.1);
+
+        // Check data
+        {
+            let origin_frame_message = messages.first_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_frame1.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_frame2.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_frame1.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_frame2.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_frame1.0.head.as_ref().unwrap().forward_for_source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_source
+            );
+            assert_eq!(
+                unpack_frame2.0.head.as_ref().unwrap().forward_for_source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_source
+            );
+            assert_eq!(
+                unpack_frame1
+                    .0
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id
+            );
+            assert_eq!(
+                unpack_frame2
+                    .0
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id
+            );
+
+            assert_eq!(
+                unpack_frame1.0.stream_offset,
+                origin_frame_message.get_message_begin_offset()
+            );
+            assert_eq!(
+                unpack_frame2.0.stream_offset,
+                origin_frame_message.get_message_begin_offset()
+                    + unpack_frame1.0.fragment[0].data.data.len() as i64
+            );
+
+            assert_eq!(unpack_frame1.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_frame2.0.timepoint_microseconds, timepoint);
+
+            assert_eq!(unpack_frame1.0.packet_flag, origin_frame_message.flags);
+            assert_eq!(unpack_frame2.0.packet_flag, origin_frame_message.flags);
+
+            assert_eq!(1, unpack_frame1.0.fragment.len());
+            assert_eq!(1, unpack_frame2.0.fragment.len());
+            assert_eq!(
+                unpack_frame1.0.stream_offset,
+                unpack_frame1.0.fragment[0].offset
+            );
+            assert_eq!(
+                unpack_frame2.0.stream_offset,
+                unpack_frame2.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message1 = unpack_frame1.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message1.packet_type,
+                unpack_frame_message1.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message1.fragment_flag,
+                PacketFragmentFlagType::HasMore as i32
+            );
+            assert_eq!(
+                unpack_frame_message1.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            let ref unpack_frame_message2 = unpack_frame2.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message2.packet_type,
+                unpack_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message2.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message2.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(
+                unpack_frame_message1.data.len() + unpack_frame_message2.data.len(),
+                origin_frame_message.data.len()
+            );
+            assert_eq!(
+                unpack_frame_message1.data,
+                origin_frame_message
+                    .data
+                    .slice(..unpack_frame_message1.data.len())
+            );
+            assert_eq!(
+                unpack_frame_message2.data,
+                origin_frame_message
+                    .data
+                    .slice(unpack_frame_message1.data.len()..)
+            );
+        }
+    }
+
+    // Pack multiple stream message into multiple fragment in one frame
+    #[test]
+    fn test_pack_multiple_stream_message() {
+        let packet_size_limit = 16384;
+        let start_offset = 379;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length1 = 153;
+        let data_length2 = 256;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .last_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 1);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + data_length1 + data_length2
+        );
+
+        assert!(
+            frame_head_reserve_size
+                + 2 * fragment_head_reserve_size
+                + data_length1 as usize
+                + data_length2 as usize
+                >= pack_result.consume_size
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        // Length not enough
+        {
+            let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+                &decoder,
+                &output[..output.len() - 1],
+                Some(ctx.borrow().stream_id),
+            );
+            assert!(unpack_result.is_err());
+            if let Err(e) = unpack_result {
+                if let ProtocolError::TruncatedHash = e {
+                    assert!(true);
+                } else {
+                    assert!(false);
+                }
+            }
+        }
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data = unpack_result.unwrap();
+        assert_eq!(pack_result.consume_size, unpack_data.1);
+
+        // Check data
+        {
+            let origin_frame_message1 = messages.first_key_value().unwrap().1;
+            let origin_frame_message2 = messages.last_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_data.0.head.as_ref().unwrap().forward_for_source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_source
+            );
+            assert_eq!(
+                unpack_data
+                    .0
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .forward_for_connection_id
+            );
+
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                origin_frame_message1.get_message_begin_offset()
+            );
+            assert_eq!(unpack_data.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data.0.packet_flag, origin_frame_message1.flags);
+
+            assert_eq!(2, unpack_data.0.fragment.len());
+            assert_eq!(
+                unpack_data.0.stream_offset,
+                unpack_data.0.fragment[0].offset
+            );
+            assert_eq!(
+                unpack_data.0.stream_offset + unpack_data.0.fragment[0].data.data.len() as i64,
+                unpack_data.0.fragment[1].offset
+            );
+
+            let ref unpack_frame_message1 = unpack_data.0.fragment[0].data;
+            let ref unpack_frame_message2 = unpack_data.0.fragment[1].data;
+            assert_eq!(
+                unpack_frame_message1.packet_type,
+                origin_frame_message1.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message2.packet_type,
+                origin_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message1.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message2.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message1.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(
+                unpack_frame_message2.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(unpack_frame_message1.data, origin_frame_message1.data);
+            assert_eq!(unpack_frame_message2.data, origin_frame_message2.data);
+        }
+    }
+
+    // Split into multiple frame and with reset flag
+    #[test]
+    fn test_pack_multiple_stream_message_with_reset_flag() {
+        let packet_size_limit = 16384;
+        let start_offset = 379;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length1 = 153;
+        let data_length2 = 256;
+        let ctx = create_context(false, 32);
+        let mut messages =
+            create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+        messages.last_entry().unwrap().get_mut().flags = PacketFlagType::ResetOffset as i32;
+
+        let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+        // predict length
+        let (frame_head_reserve_size, fragment_head_reserve_size) = messages
+            .last_key_value()
+            .unwrap()
+            .1
+            .predict_frame_size(start_offset, timepoint, &None);
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 2);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + data_length1 + data_length2
+        );
+
+        assert!(
+            2 * (frame_head_reserve_size + fragment_head_reserve_size)
+                + data_length1 as usize
+                + data_length2 as usize
+                >= pack_result.consume_size
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        // Length not enough
+        {
+            let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+                &decoder,
+                &output[..output.len() - 1],
+                Some(ctx.borrow().stream_id),
+            );
+            assert!(unpack_result.is_ok());
+            let unpack_data = unpack_result.unwrap();
+            assert!(pack_result.consume_size > unpack_data.1);
+        }
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data1 = unpack_result.unwrap();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[unpack_data1.1..],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data2 = unpack_result.unwrap();
+
+        assert_eq!(pack_result.consume_size, unpack_data1.1 + unpack_data2.1);
+
+        // Check data
+        {
+            let origin_frame_message1 = messages.first_key_value().unwrap().1;
+            let origin_frame_message2 = messages.last_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data2.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_data2.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                origin_frame_message1.get_message_begin_offset()
+            );
+            assert_eq!(
+                unpack_data2.0.stream_offset,
+                origin_frame_message2.get_message_begin_offset()
+            );
+
+            assert_eq!(unpack_data1.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data2.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data1.0.packet_flag, origin_frame_message1.flags);
+            assert_eq!(unpack_data2.0.packet_flag, origin_frame_message2.flags);
+            assert_eq!(
+                unpack_data2.0.packet_flag,
+                PacketFlagType::ResetOffset as i32
+            );
+
+            assert_eq!(1, unpack_data1.0.fragment.len());
+            assert_eq!(1, unpack_data2.0.fragment.len());
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                unpack_data1.0.fragment[0].offset
+            );
+            assert_eq!(
+                unpack_data2.0.stream_offset,
+                unpack_data2.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message1 = unpack_data1.0.fragment[0].data;
+            let ref unpack_frame_message2 = unpack_data2.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message1.packet_type,
+                origin_frame_message1.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message2.packet_type,
+                origin_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message1.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message2.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message1.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(
+                unpack_frame_message2.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(unpack_frame_message1.data, origin_frame_message1.data);
+            assert_eq!(unpack_frame_message2.data, origin_frame_message2.data);
+        }
+    }
+
+    // Partly pack multiple frame message
+    #[test]
+    fn test_partly_pack_multiple_stream_message() {
+        let packet_size_limit = 3072;
+        let start_offset = 379;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length1 = 2048;
+        let data_length2 = 1987;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+
+        let mut output: Vec<u8> = Vec::with_capacity(8192);
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output,
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 2);
+        assert_eq!(pack_result.consume_size, output.len());
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert_eq!(
+            pack_result.next_packet_fragment_offset,
+            start_offset + data_length1 + data_length2
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..pack_result.consume_size],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data1 = unpack_result.unwrap();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[unpack_data1.1..pack_result.consume_size],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data2 = unpack_result.unwrap();
+
+        assert_eq!(pack_result.consume_size, unpack_data1.1 + unpack_data2.1);
+
+        // Check data
+        {
+            let origin_frame_message1 = messages.first_key_value().unwrap().1;
+            let origin_frame_message2 = messages.last_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data2.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+            assert_eq!(
+                unpack_data2.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                origin_frame_message1.get_message_begin_offset()
+            );
+
+            assert_eq!(unpack_data1.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data2.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data1.0.packet_flag, origin_frame_message1.flags);
+            assert_eq!(unpack_data2.0.packet_flag, origin_frame_message2.flags);
+
+            assert_eq!(2, unpack_data1.0.fragment.len());
+            assert_eq!(1, unpack_data2.0.fragment.len());
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                unpack_data1.0.fragment[0].offset
+            );
+            assert_eq!(
+                unpack_data2.0.stream_offset,
+                unpack_data2.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message1 = unpack_data1.0.fragment[0].data;
+            let ref unpack_frame_message21 = unpack_data1.0.fragment[1].data;
+            let ref unpack_frame_message22 = unpack_data2.0.fragment[0].data;
+            assert_eq!(
+                unpack_frame_message1.packet_type,
+                origin_frame_message1.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message21.packet_type,
+                origin_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message22.packet_type,
+                origin_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message1.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message21.fragment_flag,
+                PacketFragmentFlagType::HasMore as i32
+            );
+            assert_eq!(
+                unpack_frame_message22.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message1.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(
+                unpack_frame_message21.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(
+                unpack_frame_message22.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(unpack_frame_message1.data, origin_frame_message1.data);
+            assert_eq!(
+                unpack_frame_message21.data,
+                origin_frame_message2
+                    .data
+                    .slice(..unpack_frame_message21.data.len())
+            );
+            assert_eq!(
+                unpack_frame_message22.data,
+                origin_frame_message2
+                    .data
+                    .slice(unpack_frame_message21.data.len()..)
+            );
+        }
+    }
+
+    // Partly pack partly frame message
+    #[test]
+    fn test_partly_pack_partly_stream_message() {
+        let packet_size_limit = 16384;
+        let start_offset = 379;
+        let timepoint = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let data_length1 = 2048;
+        let data_length2 = 1987;
+        let ctx = create_context(false, 32);
+        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+
+        let mut output: [u8; 3072] = [0 as u8; 3072];
+
+        let pack_result = StreamMessage::pack(
+            &messages,
+            &mut output[..],
+            start_offset,
+            packet_size_limit,
+            timepoint,
+        );
+
+        assert!(pack_result.is_ok());
+
+        let pack_result = pack_result.unwrap();
+        assert_eq!(pack_result.frame_count, 1);
+        assert!(pack_result.unfinished_packet_fragment_data.is_none());
+        assert!(pack_result.next_packet_fragment_offset > start_offset + data_length1);
+        assert!(
+            pack_result.next_packet_fragment_offset < start_offset + data_length1 + data_length2
+        );
+
+        // Decode
+        let decoder = Decoder::new();
+
+        let unpack_result = StreamPacketFragmentMessage::unpack_from_buffer(
+            &decoder,
+            &output[..pack_result.consume_size],
+            Some(ctx.borrow().stream_id),
+        );
+        assert!(unpack_result.is_ok());
+        let unpack_data1 = unpack_result.unwrap();
+
+        assert_eq!(pack_result.consume_size, unpack_data1.1);
+
+        // Check data
+        {
+            let origin_frame_message1 = messages.first_key_value().unwrap().1;
+            let origin_frame_message2 = messages.last_key_value().unwrap().1;
+
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().source,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .source
+            );
+            assert_eq!(
+                unpack_data1.0.head.as_ref().unwrap().destination,
+                ctx.borrow()
+                    .frame_message_template
+                    .head
+                    .as_ref()
+                    .unwrap()
+                    .destination
+            );
+
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                origin_frame_message1.get_message_begin_offset()
+            );
+
+            assert_eq!(unpack_data1.0.timepoint_microseconds, timepoint);
+            assert_eq!(unpack_data1.0.packet_flag, origin_frame_message1.flags);
+
+            assert_eq!(2, unpack_data1.0.fragment.len());
+            assert_eq!(
+                unpack_data1.0.stream_offset,
+                unpack_data1.0.fragment[0].offset
+            );
+
+            let ref unpack_frame_message1 = unpack_data1.0.fragment[0].data;
+            let ref unpack_frame_message21 = unpack_data1.0.fragment[1].data;
+            assert_eq!(
+                unpack_frame_message1.packet_type,
+                origin_frame_message1.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message21.packet_type,
+                origin_frame_message2.packet_type
+            );
+            assert_eq!(
+                unpack_frame_message1.fragment_flag,
+                PacketFragmentFlagType::None as i32
+            );
+            assert_eq!(
+                unpack_frame_message21.fragment_flag,
+                PacketFragmentFlagType::HasMore as i32
+            );
+            assert_eq!(
+                unpack_frame_message1.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+            assert_eq!(
+                unpack_frame_message21.options,
+                ctx.borrow().fragment_message_template.fragment[0].options
+            );
+
+            assert_eq!(unpack_frame_message1.data, origin_frame_message1.data);
+            assert_eq!(
+                unpack_frame_message21.data,
+                origin_frame_message2
+                    .data
+                    .slice(..unpack_frame_message21.data.len())
+            );
+            assert!(unpack_frame_message21.data.len() < origin_frame_message2.data.len());
         }
     }
 }
