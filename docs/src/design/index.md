@@ -41,22 +41,6 @@ Rust的劣势:
     + 一次性收到多个包时，可以合并Acknowledge包，只发送最后一个。
   + 中继转发支持
     + Connection和(Endpoint,Stream)为M:N关系。（对于中继，可能一个连接用于转发送多个(Endpoint,Stream)对）
-  + 可靠UDP实现
-    + 网络层仅仅提供IO抽象，可靠UDP的重传需要搭配Stream层拆包机制。
-    + 同QUIC，不允许Reneging。即只要Acknowledge收到了，就一定视为被正确接收。
-      + 同上面NACK的考量，业务层处理NACK时可以实现为允许Reneging，不由网络层实现。
-    + 经验值
-      + 1.2/1.25倍的RTT是较优重传间隔。
-      + 乱序的概率较小。
-      + 网络良好时，普通用户平均0.2%的丢包率
-      + 4G+Wifi大部分省延迟在50-90ms
-+ 由网络层提供建议的MTU。
-  + ipv4和ipv6自适应。
-    + 后续针对UDP增加MTU探测包，现代化硬件条件下大多数路由层不止支持576的MTU了。
-  + Unix sock没有MTU，可以按照UDP的Header长度(64K)分包。
-  + 共享内存通道可以根据后期需要决定是否实现，分包可以直接扩大到Message size limit。
-    + 第一代libatbus的实现中，ipv6通道已经能单核跑到接近 5Gbps 和 2820K/s的QPS。业务使用上性能远远到不了这个瓶颈。
-    + 第一代libatbus的实现中，单读多写的共享内存通道的压测性能约是 ipv6 的2倍。更多的优势来自于crash后不丢数据。
 + 数据包区分Stream id，用以区分不同的收发通道并实现并发。
   + 类似QUIC+HTTP/3的多Stream机制。
   + 内置Stream来处理TLS握手消息和应用指令（stop,reload以及一些业务层自定义指令）控制。
@@ -86,6 +70,47 @@ Rust的劣势:
 关于协议层对加密和中继转发的取舍：在QUIC协议中，Stream的offset和packet number是分离的。这样的好处是分层更清晰，且对内部内容包括如何转发、如何分流的信息也是加密的。
 但是这样也有个坏处，就是它的加密协商必须是基于单个连接链路的，没有解决 [HOL Blocking][3] 问题，特别是在多Stream和Relay服务混流的场景下，由于前面的包丢失会影响后面的包的Unpack，还会加剧 [HOL Blocking][3] 。
 在我们的应用场景中（特别是针对帧同步服务），我们更希望多个Stream直接可以尽可能互相不影响。同时也尽量降低包重组的开销，所以这里设计为在Stream处理包乱序的问题，在packet处理层不做可靠性处理。在Stream端去做解密操作，每个Stream的密钥对单独管理。这样如果有中间人监控流量，可以获知流量是否是中继转发的、发给哪个Stream的。这会导致中间人能够探测协议类型，但是对内部具体内容还是不可见的。
+
+### MTU和PMTUD(Path MTU Discovery)
+
+由网络层提供建议的MTU。
+
++ ipv4和ipv6自适应。
+  + 后续针对UDP增加MTU探测包，设置ip层不可分片，现代化硬件条件下大多数路由层不止支持576的MTU了。
++ Unix sock没有MTU，可以按照UDP的Header长度(64K)分包。
++ 共享内存通道可以根据后期需要决定是否实现，分包可以直接扩大到Message size limit。
+  + 第一代libatbus的实现中，ipv6通道已经能单核跑到接近 5Gbps 和 2820K/s的QPS。业务使用上性能远远到不了这个瓶颈。
+  + 第一代libatbus的实现中，单读多写的共享内存通道的压测性能约是 ipv6 的2倍。更多的优势来自于crash后不丢数据。
+
+### 可靠UDP实现
+
++ 网络层仅仅提供IO抽象，可靠UDP的重传需要搭配Stream层拆包机制。
++ 不允许Reneging(同QUIC)。即只要Acknowledge收到了，就一定视为被正确接收。
+  + 同上面NACK的考量，业务层处理NACK时可以实现为允许Reneging，不由网络层实现。
++ 经验值
+  + RTO: 1.2/1.25倍的RTT是较优重传间隔。
+  + 乱序的概率较小。
+  + 网络良好时，普通用户平均0.2%的丢包率
+  + 4G+Wifi大部分省延迟在50-90ms
+
+#### 拥塞控制
+
+考虑到我们在RUDP的典型使用场景为用户Wifi环境和4G/5G，这类网络一方面延迟抖动比较厉害（延迟高不代表拥塞），另一方面某些网络环境在高负载时会对UDP随机丢包。
+传统算法中CUBIC对随机丢包不友好，BBR对延迟抖动不友好。
+
+参考算法:
+
++ (大多数Linux发行版的默认) CUBIC算法: <https://datatracker.ietf.org/doc/html/rfc8312>
++ BBR算法:
+  + 简要对比参考:
+    + [《从 BBR 到 BBRv2》](https://zhuanlan.zhihu.com/p/580081548)
+    + [《从流量控制算法谈网络优化 – 从 CUBIC 到 BBRv2 算法》](https://aws.amazon.com/cn/blogs/china/talking-about-network-optimization-from-the-flow-control-algorithm/)
+  + BBR: <https://dl.acm.org/doi/pdf/10.1145/3009824>
+  + BBRv2: <https://datatracker.ietf.org/doc/html/draft-cardwell-iccrg-bbr-congestion-control>
+  + BBR和BBRv2详细对比: <https://ieeexplore.ieee.org/abstract/document/9361674>
+  + Github仓库: <https://github.com/google/bbr>
++ QUIC的拥塞控制: <https://datatracker.ietf.org/doc/html/rfc9002>
+  + 和TCP的NewReno的优化相似: <https://datatracker.ietf.org/doc/html/rfc6582>
 
 ## 可观测性
 
