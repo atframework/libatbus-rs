@@ -13,5 +13,7 @@ mod utility;
 
 criterion_main! {
   encoder::encoder_small,
-  encoder::encoder_large
+  encoder::encoder_large,
+  stream_message::stream_message_small,
+  stream_message::stream_message_large
 }

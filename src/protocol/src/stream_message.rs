@@ -441,6 +441,10 @@ impl StreamConnectionContext {
             }
         }
     }
+
+    pub fn get_stream_id(&self) -> i64 {
+        self.stream_id
+    }
 }
 
 impl StreamMessage {

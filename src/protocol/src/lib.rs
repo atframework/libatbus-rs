@@ -43,5 +43,6 @@ pub type StreamMessage = stream_message::StreamMessage;
 pub type BoxedStreamMessage = Box<StreamMessage>;
 pub type StreamPacketFragmentMessage = stream_message::StreamPacketFragmentMessage;
 pub type StreamConnectionContext = stream_message::StreamConnectionContext;
+pub type SharedStreamConnectionContext = stream_message::SharedStreamConnectionContext;
 pub type StreamPacketFragmentPack = stream_message::StreamPacketFragmentPack;
 pub type StreamPacketFragmentUnpack = stream_message::StreamPacketFragmentUnpack;

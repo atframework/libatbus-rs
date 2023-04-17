@@ -5,7 +5,6 @@ use bytes::BytesMut;
 use prost::Message;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
-use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use criterion::{black_box, criterion_group, Criterion, Throughput};
