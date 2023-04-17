@@ -132,7 +132,9 @@ debug = true
 
 ### 硬件加速
 
-非交叉编译时x86/x86_64架构可以考虑使用 `env RUSTFLAGS="-C target_cpu=native" cargo ...` 或 `env RUSTFLAGS="-C target_feature=+sse2,avx2" cargo ...` 来开启硬件加速。
+非交叉编译时x86/x86_64架构可以考虑使用 `env RUSTFLAGS="-C target_cpu=native" cargo ...` 或 `env RUSTFLAGS="-C target_feature=+sse2,+avx2" cargo ...` 来开启硬件加速。
+
+或者使用 `cargo --config 'build.rustflags = ["-C", "target_cpu=native"]' ...` 或 `cargo --config 'build.rustflags = ["-C", "target_feature=+sse2,+avx2"]' ...` 。
 
 ## Protocol
 

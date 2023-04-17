@@ -31,7 +31,7 @@ thread_local! {
 
 impl FrameBlockAlgorithm {
     /// Compute hash code for buffer data
-    pub fn hash<U>(rem: U) -> [u8; FRAME_HASH_SIZE]
+    pub fn hash<U>(mut rem: U) -> [u8; FRAME_HASH_SIZE]
     where
         U: bytes::Buf,
     {
@@ -46,6 +46,7 @@ impl FrameBlockAlgorithm {
                 if chunk.len() > 0 {
                     h.update(&chunk);
                 }
+                rem.advance(chunk.len());
             }
 
             h.digest()
