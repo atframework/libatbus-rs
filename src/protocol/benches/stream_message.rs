@@ -103,7 +103,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
-                    65000,
+                    message_size + 256,
                     timepoint,
                 );
 
@@ -147,7 +147,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
-                    65000,
+                    message_size + 256,
                     timepoint,
                 );
 
@@ -182,7 +182,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                     Some(ctx.borrow().get_stream_id()),
                 );
 
-                assert!(result.unwrap().1 > message_size);
+                assert!(result.unwrap().1 >= message_size);
 
                 output_index += 1;
                 output_index %= output_buffers.len();
@@ -207,7 +207,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                     Some(ctx.borrow().get_stream_id()),
                 );
 
-                assert!(result.unwrap().1 > message_size);
+                assert!(result.unwrap().1 >= message_size);
 
                 output_index += 1;
                 output_index %= output_buffers.len();
