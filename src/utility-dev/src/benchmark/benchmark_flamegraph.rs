@@ -1,7 +1,7 @@
 // Copyright 2023 atframework
 // Licensed under the MIT licenses.
 
-use std::{fs::File, os::raw::c_int, path::Path};
+use std::{fs::File, os::raw::c_int, path::Path, env};
 
 use criterion::profiler::Profiler;
 use pprof::ProfilerGuard;
@@ -33,9 +33,15 @@ pub struct FlamegraphProfiler<'a> {
 
 impl<'a> FlamegraphProfiler<'a> {
     #[allow(dead_code)]
-    pub fn new(frequency: i32) -> Self {
+    pub fn new(default_frequency: i32) -> Self {
+        let final_frequency: i32 =  if let Ok(x) = env::var("CARGO_PROFILE_SAMPLE_FREQUENCY") {
+            x.parse().unwrap_or(default_frequency)
+        } else {
+            default_frequency
+        };
+
         FlamegraphProfiler {
-            frequency: frequency as c_int,
+            frequency: final_frequency as c_int,
             active_profiler: None,
         }
     }

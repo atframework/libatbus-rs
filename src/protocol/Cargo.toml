@@ -19,14 +19,17 @@ autobenches = false # It's nightly now
 # bench = true   # It's nightly now
 harness = true
 
+[features]
+default = []
+
 [dependencies]
 # syn = { version = "1" }
 # quote = { version = "1" }
-# once_cell = "1"
+once_cell = { version = "1" }
 prost = { version = "0.*" }
 prost-types = { version = "0.*" }
 bytes = { version = "1" }
-murmur3 = "0.*"
+xxhash-rust = { version = "0.*", features = ["xxh3"] }
 rand = "0.*"
 libatbus-utility = { path = "../utility" }
 

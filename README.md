@@ -89,6 +89,9 @@ cargo bench/criterion
 
 # 可以关闭对比报告
 cargo criterion --plotting-backend disabled -- --discard-baseline
+
+# 指定执行时间
+cargo bench --bench my_bench -- --profile-time=5
 ```
 
 #### 性能分析
@@ -123,7 +126,13 @@ debug = true
 
 可以使用环境变量 `PERF=<path to perf>` 来指定perf的路径。
 
-最后执行 `cargo flamegraph` 来执行分析。对于benchmark可以使用 `cargo flamegraph --bench <包名字>` 。
+最后执行 `cargo flamegraph` 来执行分析。对于benchmark可以使用 `cargo flamegraph --bench my_bench` 。
+
+对于集成了 `libatbus-utility-dev` 内 `benchmark::BenchmarkProfiler` 的组件也可以直接使用 `cargo bench --bench my_bench -- --profile-time=5` 来生成火焰图和通过`CARGO_PROFILE_SAMPLE_FREQUENCY` 环境变量来设置采样率。
+
+### 硬件加速
+
+非交叉编译时x86/x86_64架构可以考虑使用 `env RUSTFLAGS=target_cpu=native cargo ...` 或 `env RUSTFLAGS=target_feature=+sse2,avx2 cargo ...` 来开启硬件加速。
 
 ## Protocol
 

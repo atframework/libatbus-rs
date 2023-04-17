@@ -3,15 +3,16 @@
 
 //! libatbus-protocol algorithm for frame block
 
-use murmur3;
+use crate::xxhash_rust;
 
 use super::error::{ProtocolError, ProtocolResult};
 
+use std::cell::RefCell;
 use std::convert::Into;
 use std::io;
 
 pub const FRAME_HASH_SIZE: usize = 4;
-const FRAME_HASH_MAGIC: u32 = 0x01000193;
+const FRAME_HASH_MAGIC: u64 = 0x01000193;
 
 #[allow(dead_code)]
 pub struct FrameBlockAlgorithm;
@@ -24,6 +25,10 @@ pub struct VarintData {
     pub value: u64,
 }
 
+thread_local! {
+    pub static HASH_XXH3 : RefCell<xxhash_rust::xxh3::Xxh3> = RefCell::new(xxhash_rust::xxh3::Xxh3::with_seed(FRAME_HASH_MAGIC));
+}
+
 impl FrameBlockAlgorithm {
     /// Compute hash code for buffer data
     pub fn hash<U>(rem: U) -> [u8; FRAME_HASH_SIZE]
@@ -32,7 +37,20 @@ impl FrameBlockAlgorithm {
     {
         let mut result: [u8; FRAME_HASH_SIZE] = [0; FRAME_HASH_SIZE];
 
-        if let Ok(mut hash_integer) = murmur3::murmur3_x64_128(&mut rem.reader(), FRAME_HASH_MAGIC)
+        let mut hash_integer = HASH_XXH3.with(|hrc| {
+            let mut h = hrc.borrow_mut();
+            h.reset();
+
+            while rem.has_remaining() {
+                let chunk = rem.chunk();
+                if chunk.len() > 0 {
+                    h.update(&chunk);
+                }
+            }
+
+            h.digest()
+        });
+
         {
             unsafe {
                 for i in 0..FRAME_HASH_SIZE {

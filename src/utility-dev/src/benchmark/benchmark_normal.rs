@@ -8,7 +8,7 @@ use criterion::profiler::Profiler;
 pub struct NormalProfiler {}
 
 impl NormalProfiler {
-    pub fn new(_frequency: i32) -> Self {
+    pub fn new(_default_frequency: i32) -> Self {
         NormalProfiler {}
     }
 }

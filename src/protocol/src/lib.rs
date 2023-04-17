@@ -3,9 +3,11 @@
 
 extern crate bytes;
 extern crate libatbus_utility;
-extern crate murmur3;
+extern crate xxhash_rust;
 extern crate prost;
 extern crate rand;
+extern crate once_cell;
+
 // extern crate quote;
 // extern crate syn;
 // https://doc.rust-lang.org/book/ch19-06-macros.html?highlight=derive#how-to-write-a-custom-derive-macro
