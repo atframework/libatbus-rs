@@ -5,6 +5,9 @@ extern crate bytes;
 extern crate criterion;
 extern crate rand;
 
+extern crate libatbus_utility;
+extern crate libatbus_utility_dev;
+
 use criterion::criterion_main;
 
 mod encoder;

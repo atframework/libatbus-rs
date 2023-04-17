@@ -75,15 +75,55 @@ rev = "…"            # revision for the git repository
 
 https://doc.rust-lang.org/cargo/reference/config.html
 
-### 压力测试
+### 压力测试和性能分析
+
+#### 压力测试
 
 ```bash
 
-# 关闭对比报告
+# 安装工具
 cargo install cargo-criterion
 
+# 执行
+cargo bench/criterion
+
+# 可以关闭对比报告
 cargo criterion --plotting-backend disabled -- --discard-baseline
 ```
+
+#### 性能分析
+
+安装工具
+
+```bash
+cargo install flamegraph
+
+# 安装perf工具
+# Debian : sudo apt install -y linux-perf
+# Ubuntu : sudo apt install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`
+# Ubuntu/Ubuntu MATE : sudo apt install -y linux-tools-raspi
+# Pop!_OS : sudo apt install -y linux-tools-common linux-tools-generic
+# CentOS/Redhat : sudo yum/dnf install perf
+```
+
+编译 `Cargo.toml` ，加入以下配置以提升调用栈的精确性。
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+linker = "<clang路径>"
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--no-rosegment"]
+```
+
+编译 `Cargo.toml` ，加入以下配置或使用环境变量 `CARGO_PROFILE_RELEASE_DEBUG=true` 以获取更完整的信息。
+
+```toml
+[profile.bench]
+debug = true
+```
+
+可以使用环境变量 `PERF=<path to perf>` 来指定perf的路径。
+
+最后执行 `cargo flamegraph` 来执行分析。对于benchmark可以使用 `cargo flamegraph --bench <包名字>` 。
 
 ## Protocol
 

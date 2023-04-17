@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use crate::criterion::{criterion_group, Criterion, Throughput};
 use crate::rand::{thread_rng, Rng};
 
+use crate::libatbus_utility_dev::benchmark::BenchmarkProfiler;
+
 use ::libatbus_protocol::decoder::Decoder;
 use ::libatbus_protocol::{
     AtbusPacketType, FrameMessageHead, SharedStreamConnectionContext, StreamConnectionContext,
@@ -234,14 +236,14 @@ fn stream_message_encode_and_decode_large(c: &mut Criterion) {
 
 criterion_group! {
     name = stream_message_small;
-    config = Criterion::default();
+    config = Criterion::default().with_profiler(BenchmarkProfiler::new(1000));
         // .warm_up_time(Duration::from_micros(256))
     targets = stream_message_encode_and_decode_small
 }
 
 criterion_group! {
     name = stream_message_large;
-    config = Criterion::default();
+    config = Criterion::default().with_profiler(BenchmarkProfiler::new(1000));
         // .warm_up_time(Duration::from_micros(256));
     targets = stream_message_encode_and_decode_large
 }

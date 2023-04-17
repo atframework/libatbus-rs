@@ -1,5 +1,5 @@
 [package]
-name = "libatbus-utility"
+name = "libatbus-utility-dev"
 version = "0.1.0"
 authors = ["owent <admin@owent.net>"]
 edition = "2021"
@@ -10,8 +10,7 @@ edition = "2021"
 default = []
 
 [dependencies]
-quote = { version = "1" }
-bytes = { version = "1" }
-uuid = { version = "1", features = ["v4", "fast-rng"] }
-once_cell = "1"
-# libatbus-protocol = { path = "protocol" }
+criterion = { version = "0.*", features = ["html_reports"] }
+
+[target.'cfg(target_family = "unix")'.dependencies]
+pprof = { version = "0.*", features = ["flamegraph"] }
