@@ -15,7 +15,7 @@ enum ATBUS_PROTOCOL_CONST {
   ATBUS_PROTOCOL_CONST_UNKNOWN         = 0;
   ATBUS_PROTOCOL_CONST_MAGIC_NUMBER    = 16777619; // 0x1000193
   ATBUS_PROTOCOL_CONST_VERSION         = 3;
-  ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3;        // minimal protocol version supported
+  ATBUS_PROTOCOL_CONST_MINIMAL_VERSION = 3; // minimal protocol version supported
 
   // Internal packet type, user custom type should be greater than this.
   ATBUS_PROTOCOL_CONST_INTERNAL_PACKET_TYPE = 100;
@@ -36,7 +36,7 @@ enum ATBUS_PACKET_FLAG_TYPE {
   // When endpoints are first created or receive a packet_data with acknowledge lower than the first message in queue
   // We need to send a packet_data with ATBUS_PACKET_FLAG_RESET_OFFSET.
   // When any packet is sent partly by this connection and the rest fragments are received by other connections, we also
-  // will send the first fragmentof next packet with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
+  // will send the first fragment of next packet with ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
   ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET = 4;
 
   // TLS Handshake

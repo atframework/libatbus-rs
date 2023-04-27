@@ -18,7 +18,7 @@ use crate::libatbus_utility_dev::benchmark::BenchmarkProfiler;
 use ::libatbus_protocol::decoder::Decoder;
 use ::libatbus_protocol::{
     AtbusPacketType, FrameMessageHead, SharedStreamConnectionContext, StreamConnectionContext,
-    StreamMessage, StreamPacketFragmentMessage,
+    StreamConnectionMessage, StreamPacketFragmentMessage,
 };
 
 use super::utility::generate_uuid;
@@ -57,18 +57,18 @@ fn insert_stream_messages(
     start_offset: i64,
     message_pool: &Vec<::prost::bytes::Bytes>,
     pool_index: usize,
-    simulator_stream_messages: &mut BTreeMap<i64, Box<StreamMessage>>,
+    simulator_stream_messages: &mut BTreeMap<i64, Box<StreamConnectionMessage>>,
 ) {
     simulator_stream_messages.insert(
         start_offset,
-        Box::new(StreamMessage {
-            packet_type: AtbusPacketType::Data as i32,
-            stream_offset: start_offset,
-            data: message_pool[pool_index].clone(),
-            flags: 0,
-            close_reason: None,
-            connection_context: ctx.clone(),
-        }),
+        Box::new(StreamConnectionMessage::new(
+            ctx.clone(),
+            AtbusPacketType::Data as i32,
+            start_offset,
+            message_pool[pool_index].clone(),
+            0,
+            None,
+        )),
     );
 }
 
@@ -78,7 +78,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
     let message_pool = prepare_message_pool(message_size, count);
     let mut message_index: usize = 0;
     let mut current_offset = 0;
-    let mut simulator_stream_messages: BTreeMap<i64, Box<StreamMessage>> = BTreeMap::new();
+    let mut simulator_stream_messages: BTreeMap<i64, Box<StreamConnectionMessage>> = BTreeMap::new();
 
     let mut output_buffers = Vec::with_capacity(count);
     {
@@ -101,7 +101,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                 );
 
                 let mut output: Vec<u8> = Vec::with_capacity(message_size + 4096);
-                let pack_result = StreamMessage::pack(
+                let pack_result = StreamConnectionMessage::pack(
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
@@ -145,7 +145,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                 );
 
                 let mut output: Vec<u8> = Vec::with_capacity(message_size + 4096);
-                let pack_result = StreamMessage::pack(
+                let pack_result = StreamConnectionMessage::pack(
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
@@ -221,17 +221,17 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
 }
 
 fn stream_message_encode_and_decode_small(c: &mut Criterion) {
-    stream_message_benchmark(c, "StreamMessage -> small message", 64);
-    stream_message_benchmark(c, "StreamMessage -> small message", 128);
-    stream_message_benchmark(c, "StreamMessage -> small message", 256);
-    stream_message_benchmark(c, "StreamMessage -> small message", 400);
-    stream_message_benchmark(c, "StreamMessage -> small message", 1024);
+    stream_message_benchmark(c, "StreamConnectionMessage -> small message", 64);
+    stream_message_benchmark(c, "StreamConnectionMessage -> small message", 128);
+    stream_message_benchmark(c, "StreamConnectionMessage -> small message", 256);
+    stream_message_benchmark(c, "StreamConnectionMessage -> small message", 400);
+    stream_message_benchmark(c, "StreamConnectionMessage -> small message", 1024);
 }
 
 fn stream_message_encode_and_decode_large(c: &mut Criterion) {
-    stream_message_benchmark(c, "StreamMessage -> large message", 4096);
-    stream_message_benchmark(c, "StreamMessage -> large message", 16000);
-    stream_message_benchmark(c, "StreamMessage -> large message", 65000);
+    stream_message_benchmark(c, "StreamConnectionMessage -> large message", 4096);
+    stream_message_benchmark(c, "StreamConnectionMessage -> large message", 16000);
+    stream_message_benchmark(c, "StreamConnectionMessage -> large message", 65000);
 }
 
 criterion_group! {

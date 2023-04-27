@@ -2,75 +2,106 @@
 // Licensed under the MIT licenses.
 
 use std::collections::BTreeMap;
+use std::collections::LinkedList;
 use std::ops::Bound::Included;
 
 use libatbus_protocol::{
-    error::ProtocolResult, BoxedFrameMessage, BoxedStreamMessage, PacketFlagType,
-    PacketFragmentFlagType, StreamPacketFragmentMessage,
+    error::ProtocolResult, BoxedStreamMessage, PacketFlagType, PacketFragmentFlagType,
+    SharedStreamPacketInformation, StreamMessage, StreamPacketFragmentMessage,
+    StreamPacketFragmentUnpack,
 };
 
-pub struct StreamReceiveResult {
+use crate::bytes;
+
+pub struct StreamPushResult {
     pub packet_begin_offset: i64,
     pub packet_end_offset: i64,
-    pub packet_flag: i32,
-    pub timepoint_microseconds: i64,
 }
+
+pub struct StreamReadResult {
+    pub message: StreamMessage,
+    pub fragment_count: usize,
+    pub first_timepoint_microseconds: i64,
+    pub last_timepoint_microseconds: i64,
+}
+
+pub type BoxedStreamReadResult = Box<StreamReadResult>;
 
 pub struct Stream {
     stream_id: i64,
 
     // Send window, dynamic length
-    send_frames: BTreeMap<i64, BoxedStreamMessage>,
-    send_frames_acknowledge_offset: usize,
+    send_messages: BTreeMap<i64, BoxedStreamMessage>,
+    send_acknowledge_offset: usize,
 
     // Receive window, dynamic length
-    received_frames: BTreeMap<i64, StreamPacketFragmentMessage>,
+    received_fragments: BTreeMap<i64, StreamPacketFragmentMessage>,
+    // Received message, pending to be read by caller
+    received_messages: LinkedList<BoxedStreamReadResult>,
+    received_message_total_length: usize,
 
     // All datas before received_acknowledge_offset are all received.
     received_acknowledge_offset: i64,
-    // Cached flag to find out if a packet is finished quickly.
-    received_packet_finished: bool,
 }
 
 impl Stream {
+    pub fn new(stream_id: i64) -> Self {
+        Stream {
+            stream_id,
+            send_messages: BTreeMap::new(),
+            send_acknowledge_offset: 0,
+            received_fragments: BTreeMap::new(),
+            received_messages: LinkedList::new(),
+            received_message_total_length: 0,
+            received_acknowledge_offset: 0,
+        }
+    }
+
+    #[inline]
+    pub fn get_stream_id(&self) -> i64 {
+        self.stream_id
+    }
+
     pub fn get_acknowledge_offset(&self) -> i64 {
         self.received_acknowledge_offset
     }
 
     pub fn get_receive_max_offset(&self) -> i64 {
-        match self.received_frames.last_key_value() {
+        match self.received_fragments.last_key_value() {
             Some(last_packet) => last_packet.0 + (last_packet.1.get_message_length() as i64),
             None => self.received_acknowledge_offset,
         }
     }
 
     pub fn acknowledge_send_buffer(&mut self, offset: i64) {
-        if offset > self.send_frames_acknowledge_offset as i64 {
-            self.send_frames_acknowledge_offset = offset as usize;
+        if offset > self.send_acknowledge_offset as i64 {
+            self.send_acknowledge_offset = offset as usize;
         }
 
         loop {
-            if self.send_frames.is_empty() {
+            if self.send_messages.is_empty() {
                 break;
             }
 
-            let first = self.send_frames.first_key_value().unwrap();
-            if self.send_frames_acknowledge_offset
-                < (*first.0 as usize) + first.1.as_ref().data.len()
-            {
+            let first = self.send_messages.first_key_value().unwrap();
+            if self.send_acknowledge_offset < (*first.0 as usize) + first.1.as_ref().data.len() {
                 break;
             }
 
-            self.send_frames.pop_first();
+            self.send_messages.pop_first();
         }
     }
 
-    pub fn receive(&mut self, frame: BoxedFrameMessage) -> ProtocolResult<StreamReceiveResult> {
-        let frame_messages = StreamPacketFragmentMessage::unpack(frame, Some(self.stream_id))?;
-
+    ///
+    /// Receive and push fragment into this stream.
+    ///
+    pub fn receive_push(
+        &mut self,
+        frame_messages: StreamPacketFragmentUnpack,
+    ) -> ProtocolResult<StreamPushResult> {
         // Drop unfinished packet when got ATBUS_PACKET_FLAG_TYPE_RESET_OFFSET.
         if frame_messages.stream_offset >= 0
-            && frame_messages.packet_flag & (PacketFlagType::ResetOffset as i32) != 0
+            && frame_messages.packet.packet_flag & (PacketFlagType::ResetOffset as i32) != 0
         {
             self.reset_acknowledge_offset(frame_messages.stream_offset);
         }
@@ -78,10 +109,10 @@ impl Stream {
         let this_frame_message_start = frame_messages.stream_offset;
         let mut this_frame_message_end = this_frame_message_start;
         for fragment in frame_messages.fragment {
-            // if received_frames already contains this frame, just ingnore this one.
+            // if received_fragments already contains this frame, just ingnore this one.
             {
                 let check_contained = self
-                    .received_frames
+                    .received_fragments
                     .range((Included(0), Included(fragment.get_message_begin_offset())));
                 match check_contained.last() {
                     Some(checked) => {
@@ -101,7 +132,7 @@ impl Stream {
             let mut pending_to_drop = vec![];
             {
                 let check_contained = self
-                    .received_frames
+                    .received_fragments
                     .range(fragment.get_message_begin_offset()..);
                 for checked in check_contained {
                     if checked.1.get_message_end_offset() <= fragment.get_message_end_offset() {
@@ -110,17 +141,17 @@ impl Stream {
                 }
             }
             for drop_key in pending_to_drop {
-                self.received_frames.remove(&drop_key);
+                self.received_fragments.remove(&drop_key);
             }
 
             this_frame_message_end = fragment.get_message_end_offset();
 
             let _ = self
-                .received_frames
+                .received_fragments
                 .insert(fragment.get_message_begin_offset(), fragment);
         }
 
-        // check and reset received_packet_finished
+        // check and reset received_acknowledge_offset
         if this_frame_message_start <= self.received_acknowledge_offset
             && this_frame_message_end > self.received_acknowledge_offset
         {
@@ -130,36 +161,131 @@ impl Stream {
         // TODO: 提取内部指令数据包
         // TODO: 处理Handshake包，即便在正常数据流过程中也可能夹杂Handshake包，用于换密钥。
 
-        Ok(StreamReceiveResult {
+        Ok(StreamPushResult {
             packet_begin_offset: this_frame_message_start,
             packet_end_offset: this_frame_message_end,
-            packet_flag: frame_messages.packet_flag,
-            timepoint_microseconds: frame_messages.timepoint_microseconds,
         })
     }
 
+    /// Pop received fragments and construct a full message.
+    fn receive_pop_fragments(&mut self, current_message_end: i64) -> Option<BoxedStreamReadResult> {
+        let (
+            current_message_begin,
+            packet_type,
+            mut packet_flags,
+            mut first_timepoint_microseconds,
+        ) = if let Some(checked) = self.received_fragments.first_key_value() {
+            (
+                checked.1.get_message_begin_offset(),
+                checked.1.data.packet_type,
+                checked.1.packet.packet_flag,
+                checked.1.packet.timepoint_microseconds,
+            )
+        } else {
+            return None;
+        };
+
+        let mut last_timepoint_microseconds = first_timepoint_microseconds;
+
+        let mut close_reason = None;
+        let mut data =
+            bytes::BytesMut::with_capacity((current_message_end - current_message_begin) as usize);
+        let mut fragment_count = 0;
+        loop {
+            if let Some(m) = self.received_fragments.first_key_value() {
+                if m.1.get_message_end_offset() <= current_message_end {
+                    if let Some(kv) = self.received_fragments.pop_first() {
+                        packet_flags |= kv.1.packet.packet_flag;
+
+                        if kv.1.get_message_end_offset() > current_message_begin + data.len() as i64
+                        {
+                            let valid_start = current_message_begin as usize + data.len()
+                                - kv.1.get_message_begin_offset() as usize;
+                            data.extend_from_slice(&kv.1.data.data[valid_start..]);
+                        }
+
+                        if kv.1.packet.timepoint_microseconds > last_timepoint_microseconds {
+                            last_timepoint_microseconds = kv.1.packet.timepoint_microseconds;
+                        }
+
+                        if kv.1.packet.timepoint_microseconds < first_timepoint_microseconds {
+                            first_timepoint_microseconds = kv.1.packet.timepoint_microseconds;
+                        }
+
+                        if let Some(cr) = kv.1.data.close_reason {
+                            close_reason = Some(cr);
+                        }
+
+                        fragment_count += 1;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Some(Box::new(StreamReadResult {
+            message: StreamMessage::new(
+                packet_type,
+                current_message_begin,
+                data.into(),
+                packet_flags,
+                close_reason.map(|v| v.into()),
+            ),
+            fragment_count,
+            first_timepoint_microseconds,
+            last_timepoint_microseconds,
+        }))
+    }
+
     fn move_received_acknowledge_offset(&mut self) {
-        let check_contained = self
-            .received_frames
-            .range(self.received_acknowledge_offset..);
-        for checked in check_contained {
-            if checked.1.get_message_begin_offset() > self.received_acknowledge_offset {
+        loop {
+            let last_fragment = if let Some(x) = self.received_fragments.last_key_value() {
+                x
+            } else {
+                break;
+            };
+
+            if last_fragment.1.get_message_end_offset() <= self.received_acknowledge_offset {
                 break;
             }
 
-            if checked.1.get_message_begin_offset() <= self.received_acknowledge_offset
-                && checked.1.get_message_end_offset() > self.received_acknowledge_offset
+            let mut received_packet_finished_offset = None;
             {
-                self.received_acknowledge_offset = checked.1.get_message_end_offset();
+                let check_contained = self
+                    .received_fragments
+                    .range(self.received_acknowledge_offset..);
+                for checked in check_contained {
+                    if checked.1.get_message_begin_offset() > self.received_acknowledge_offset {
+                        break;
+                    }
 
-                if !self.received_packet_finished {
-                    if checked
-                        .1
-                        .check_fragment_flag(PacketFragmentFlagType::HasMore)
+                    if checked.1.get_message_begin_offset() <= self.received_acknowledge_offset
+                        && checked.1.get_message_end_offset() > self.received_acknowledge_offset
                     {
-                        self.received_packet_finished = true;
+                        self.received_acknowledge_offset = checked.1.get_message_end_offset();
+
+                        if !checked
+                            .1
+                            .check_fragment_flag(PacketFragmentFlagType::HasMore)
+                        {
+                            received_packet_finished_offset =
+                                Some(checked.1.get_message_end_offset());
+                            break;
+                        }
                     }
                 }
+            }
+
+            if let Some(this_message_offset_end) = received_packet_finished_offset {
+                if let Some(new_read_result) = self.receive_pop_fragments(this_message_offset_end) {
+                    self.received_message_total_length += new_read_result.message.data.len();
+                    self.received_messages.push_back(new_read_result);
+                }
+            } else {
+                break;
             }
         }
     }
@@ -170,19 +296,19 @@ impl Stream {
         }
 
         // Remove all frames less than offset
-        while !self.received_frames.is_empty() {
-            let checked = self.received_frames.first_key_value().unwrap();
+        while !self.received_fragments.is_empty() {
+            let checked = self.received_fragments.first_key_value().unwrap();
             if checked.1.get_message_end_offset() > offset {
                 break;
             }
 
-            self.received_frames.pop_first();
+            self.received_fragments.pop_first();
         }
 
         // Remove all frames contains offset and select the largest one
         let mut strip_frame = None;
-        while !self.received_frames.is_empty() {
-            let checked = self.received_frames.first_key_value().unwrap();
+        while !self.received_fragments.is_empty() {
+            let checked = self.received_fragments.first_key_value().unwrap();
             if checked.1.get_message_begin_offset() >= offset {
                 break;
             }
@@ -201,17 +327,253 @@ impl Stream {
                 }
             }
 
-            self.received_frames.pop_first();
+            self.received_fragments.pop_first();
         }
 
         // Insert striped frame.
         match strip_frame {
             Some(f) => {
                 if !f.is_empty() {
-                    self.received_frames.insert(f.get_message_begin_offset(), f);
+                    self.received_fragments
+                        .insert(f.get_message_begin_offset(), f);
                 }
             }
             None => {}
         }
     }
+
+    pub fn receive_read(&mut self) -> Option<BoxedStreamReadResult> {
+        if let Some(x) = self.received_messages.pop_front() {
+            self.received_message_total_length -= x.message.data.len();
+            Some(x)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_receive_readable(&self) -> bool {
+        !self.received_messages.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::bytes::Bytes;
+    use crate::rand::{thread_rng, Rng};
+
+    use libatbus_protocol::{
+        AtbusPacketType, FrameMessageHead, PacketFragmentMessage, StreamPacketInformation,
+    };
+
+    use std::collections::HashMap;
+    use std::ops::DerefMut;
+    use std::rc::Rc;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn generate_message_data_buffer(size: usize) -> bytes::Bytes {
+        let mut ret = vec![b'0'; size as usize];
+
+        thread_rng().fill(ret.deref_mut());
+
+        ret.into()
+    }
+
+    fn generate_message_data<S>(
+        source: &bytes::Bytes,
+        mut stream_offset: usize,
+        fragment_sizes: S,
+        packet_flag: i32,
+        timepoint_microseconds: i64,
+        finish_last_fragment: bool,
+    ) -> StreamPacketFragmentUnpack
+    where
+        S: AsRef<[usize]>,
+    {
+        let mut ret = StreamPacketFragmentUnpack {
+            packet: Rc::new(StreamPacketInformation {
+                head: Some(FrameMessageHead {
+                    source: String::from("relaysvr:node-random-name-abcdefg"),
+                    destination: String::from("server:node-random-name-abcdefg"),
+                    forward_for_source: String::from("client:node-random-name-abcdefg"),
+                    forward_for_connection_id: 5321,
+                }),
+                packet_flag,
+                timepoint_microseconds,
+            }),
+            stream_offset: stream_offset as i64,
+            fragment: Vec::with_capacity(fragment_sizes.as_ref().len()),
+        };
+
+        for i in 0..fragment_sizes.as_ref().len() {
+            let fragment_size = fragment_sizes.as_ref()[i];
+            if stream_offset >= source.len() {
+                break;
+            }
+
+            if stream_offset + fragment_size >= source.len() {
+                ret.fragment.push(StreamPacketFragmentMessage {
+                    packet: ret.packet.clone(),
+                    offset: stream_offset as i64,
+                    data: PacketFragmentMessage {
+                        packet_type: AtbusPacketType::Data as i32,
+                        data: source.slice(stream_offset..source.len()),
+                        fragment_flag: if finish_last_fragment {
+                            0
+                        } else {
+                            PacketFragmentFlagType::HasMore as i32
+                        },
+                        options: None,
+                        labels: HashMap::new(),
+                        forward_for: None,
+                        close_reason: None,
+                    },
+                });
+                break;
+            } else {
+                ret.fragment.push(StreamPacketFragmentMessage {
+                    packet: ret.packet.clone(),
+                    offset: stream_offset as i64,
+                    data: PacketFragmentMessage {
+                        packet_type: AtbusPacketType::Data as i32,
+                        data: source.slice(stream_offset..stream_offset + fragment_size),
+                        fragment_flag: if finish_last_fragment
+                            && i + 1 == fragment_sizes.as_ref().len()
+                        {
+                            0
+                        } else {
+                            PacketFragmentFlagType::HasMore as i32
+                        },
+                        options: None,
+                        labels: HashMap::new(),
+                        forward_for: None,
+                        close_reason: None,
+                    },
+                });
+                stream_offset += fragment_size;
+            }
+        }
+
+        ret
+    }
+
+    #[test]
+    fn receive_message() {
+        let mut stream = Stream::new(137);
+        assert_eq!(137, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(8000);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            256,
+            &[1024, 1024],
+            PacketFlagType::ResetOffset as i32,
+            timepoint_start,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(256, receive_result.packet_begin_offset);
+        assert_eq!(256 + 2048, receive_result.packet_end_offset);
+
+        assert_eq!(256 + 2048, stream.get_acknowledge_offset());
+        assert_eq!(256 + 2048, stream.get_receive_max_offset());
+        assert_eq!(false, stream.is_receive_readable());
+        assert!(stream.receive_read().is_none());
+
+        // Hole
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            256 + 2048 + 2048,
+            &[2048],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(256 + 2048 + 2048, receive_result.packet_begin_offset);
+        assert_eq!(256 + 2048 + 2048 + 2048, receive_result.packet_end_offset);
+        assert_eq!(false, stream.is_receive_readable());
+        assert!(stream.receive_read().is_none());
+
+        assert_eq!(256 + 2048, stream.get_acknowledge_offset());
+        assert_eq!(256 + 2048 + 2048 + 2048, stream.get_receive_max_offset());
+
+        // Fill hole
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            256 + 2048,
+            &[2048],
+            0,
+            timepoint_start + 2,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(256 + 2048, receive_result.packet_begin_offset);
+        assert_eq!(256 + 2048 + 2048, receive_result.packet_end_offset);
+        assert_eq!(true, stream.is_receive_readable());
+
+        assert_eq!(256 + 2048 + 2048 + 2048, stream.get_acknowledge_offset());
+        assert_eq!(256 + 2048 + 2048 + 2048, stream.get_receive_max_offset());
+
+        // Verify message
+        // receive first
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(256, read_result.message.stream_offset);
+        assert_eq!(3, read_result.fragment_count);
+        assert_eq!(timepoint_start, read_result.first_timepoint_microseconds);
+        assert_eq!(timepoint_start + 2, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(256..256 + 4096));
+
+        assert_eq!(true, stream.is_receive_readable());
+
+        // receive second
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert_eq!(256 + 4096, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(
+            timepoint_start + 1,
+            read_result.first_timepoint_microseconds
+        );
+        assert_eq!(timepoint_start + 1, read_result.last_timepoint_microseconds);
+        assert!(
+            read_result.message.data == message_data_buffer.slice(256 + 4096..256 + 4096 + 2048)
+        );
+
+        assert_eq!(false, stream.is_receive_readable());
+    }
+
+    #[test]
+    fn receive_reset_offset() {}
+
+    #[test]
+    fn receive_reset_offset_with_unreceived_message() {}
+
+    #[test]
+    fn receive_overlap() {}
+
+    #[test]
+    fn receive_overwrite() {}
 }

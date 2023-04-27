@@ -4,14 +4,11 @@
 extern crate libatbus_utility;
 extern crate libatbus_protocol;
 
+extern crate bytes;
+
+#[cfg(test)]
+extern crate rand;
+
 pub mod stream;
 pub mod config;
 pub mod endpoint;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

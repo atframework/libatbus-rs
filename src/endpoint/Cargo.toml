@@ -9,3 +9,8 @@ edition = "2021"
 [dependencies]
 libatbus-protocol = { path = "../protocol" }
 libatbus-utility = { path = "../utility" }
+
+bytes = { version = "1" }
+
+[dev-dependencies]
+rand = "0.*"

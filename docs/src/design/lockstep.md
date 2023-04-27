@@ -34,6 +34,20 @@
     + 同子网检测。
   + UPnP/SSDP（很多路由禁用）。
   + 打洞: RFC5780 侦测NAT规则（低优先级）。
+    + NAT:
+      + NAT1(完全锥型（Full Cone NAT）): 内部地址(iAddr, iPort)映射到外部地址(eAddr, ePort)后，任意外部(hAddr, hPort)向(eAddr, ePort)发送的包都会转发到内部的(iAddr, iPort)
+        > 此时Client 1向Server发送请求后，Server把Client 1对应的(eAddr, ePort)告知Client 2，Client 2可以直接向(eAddr, ePort)发包，最终会转给(iAddr, iPort)
+      + NAT2(地址受限锥型（Restricted Cone NAT）): 内部地址(iAddr, iPort)映射到外部地址(eAddr, ePort)后，任意外部(hAddr, hPort)向(eAddr, ePort)发送的包都会转发到内部的(iAddr, iPort)。但会验证来源的hAddr必须通过内部地址(iAddr, iPort)发送过消息。
+        > Client 1使用(iAddr, iPort)向Server发送请求后，Client 1需要使用相同的源地址(iAddr, iPort)给Client 2发包，然后Server把Client 1对应的(eAddr, ePort)告知Client 2。
+        > Client 2后续就可以通过向(eAddr, ePort)发包最终会传达给Client 1的(iAddr, iPort)。
+      + NAT3(端口受限锥型（Port Restricted Cone NAT）): 内部地址(iAddr, iPort)映射到外部地址(eAddr, ePort)后，任意外部(hAddr, hPort)向(eAddr, ePort)发送的包都会转发到内部的(iAddr, iPort)。但会验证来源的(hAddr, hPort)必须通过内部地址(iAddr, iPort)发送过消息。
+        > 打洞方案同上
+      + NAT4(对称型（Symmetric NAT）): 内部地址(iAddr,iPort)向外部主机(hAddr, hPort)发送数据并映射到外部地址(eAddr, ePort)后，外部主机(hAddr, hPort)向(eAddr, ePort)发送的包都会转发到内部的(iAddr, iPort)。反向无法主动发起连接。
+        >
+        > + 大多数Linux发行版默认firewalld规则走这种形式的NAT。
+        > + 公共和企业Wifi环境使用这种方式较多。
+        > + 电信运营商在逐步推行NAT4以对抗PCDN（比如河南移动在2023年实施）。
+        >
 + 重要赛事冗余
   + 由Lockstep service层面分配主备，故障时切到备机。
 
