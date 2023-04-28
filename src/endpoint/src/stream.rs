@@ -7,8 +7,8 @@ use std::ops::Bound::Included;
 
 use libatbus_protocol::{
     error::ProtocolResult, BoxedStreamMessage, PacketFlagType, PacketFragmentFlagType,
-    SharedStreamPacketInformation, StreamMessage, StreamPacketFragmentMessage,
-    StreamPacketFragmentUnpack,
+    SharedStreamConnectionContext, StreamConnectionMessage, StreamMessage,
+    StreamPacketFragmentMessage, StreamPacketFragmentUnpack,
 };
 
 use crate::bytes;
@@ -27,11 +27,16 @@ pub struct StreamReadResult {
 
 pub type BoxedStreamReadResult = Box<StreamReadResult>;
 
+struct StreamConnection {
+    context: SharedStreamConnectionContext,
+    sent_offset: i64,
+}
+
 pub struct Stream {
     stream_id: i64,
 
     // Send window, dynamic length
-    send_messages: BTreeMap<i64, BoxedStreamMessage>,
+    send_messages: BTreeMap<i64, Box<StreamConnectionMessage>>,
     send_acknowledge_offset: usize,
 
     // Receive window, dynamic length
@@ -66,6 +71,14 @@ impl Stream {
         self.received_acknowledge_offset
     }
 
+    pub fn get_send_start_offset(&self) -> i64 {
+        if let Some(x) = self.send_messages.last_key_value() {
+            x.1.get_message_end_offset()
+        } else {
+            self.received_acknowledge_offset
+        }
+    }
+
     pub fn get_receive_max_offset(&self) -> i64 {
         match self.received_fragments.last_key_value() {
             Some(last_packet) => last_packet.0 + (last_packet.1.get_message_length() as i64),
@@ -73,7 +86,16 @@ impl Stream {
         }
     }
 
-    pub fn acknowledge_send_buffer(&mut self, offset: i64) {
+    pub fn send_message(&mut self, mut message: BoxedStreamMessage) -> ProtocolResult<()> {
+        message.stream_offset = self.get_send_start_offset();
+
+        self.send_messages.insert(message.stream_offset, message);
+
+        // TODO Active all connections to send data.
+        Ok(())
+    }
+
+    pub fn send_acknowledge(&mut self, offset: i64) {
         if offset > self.send_acknowledge_offset as i64 {
             self.send_acknowledge_offset = offset as usize;
         }
@@ -155,7 +177,7 @@ impl Stream {
         if this_frame_message_start <= self.received_acknowledge_offset
             && this_frame_message_end > self.received_acknowledge_offset
         {
-            self.move_received_acknowledge_offset();
+            self.move_received_acknowledge_offset(this_frame_message_start);
         }
 
         // TODO: 提取内部指令数据包
@@ -240,7 +262,7 @@ impl Stream {
         }))
     }
 
-    fn move_received_acknowledge_offset(&mut self) {
+    fn move_received_acknowledge_offset(&mut self, this_frame_message_start: i64) {
         loop {
             let last_fragment = if let Some(x) = self.received_fragments.last_key_value() {
                 x
@@ -254,9 +276,7 @@ impl Stream {
 
             let mut received_packet_finished_offset = None;
             {
-                let check_contained = self
-                    .received_fragments
-                    .range(self.received_acknowledge_offset..);
+                let check_contained = self.received_fragments.range(this_frame_message_start..);
                 for checked in check_contained {
                     if checked.1.get_message_begin_offset() > self.received_acknowledge_offset {
                         break;
@@ -360,7 +380,6 @@ impl Stream {
 mod test {
     use super::*;
 
-    use crate::bytes::Bytes;
     use crate::rand::{thread_rng, Rng};
 
     use libatbus_protocol::{
@@ -532,6 +551,7 @@ mod test {
 
         assert_eq!(256 + 2048 + 2048 + 2048, stream.get_acknowledge_offset());
         assert_eq!(256 + 2048 + 2048 + 2048, stream.get_receive_max_offset());
+        assert_eq!(2048 + 2048 + 2048, stream.received_message_total_length);
 
         // Verify message
         // receive first
@@ -546,6 +566,7 @@ mod test {
         assert!(read_result.message.data == message_data_buffer.slice(256..256 + 4096));
 
         assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(2048, stream.received_message_total_length);
 
         // receive second
         let read_result = stream.receive_read();
@@ -563,17 +584,466 @@ mod test {
         );
 
         assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
     }
 
     #[test]
-    fn receive_reset_offset() {}
+    fn receive_reset_offset() {
+        let mut stream = Stream::new(138);
+        assert_eq!(138, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(2048);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message =
+            generate_message_data(&message_data_buffer, 0, &[256], 0, timepoint_start, false);
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(0, receive_result.packet_begin_offset);
+        assert_eq!(256, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert!(stream.receive_read().is_none());
+
+        // Hole
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            512 + 512,
+            &[512],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(512 + 512, receive_result.packet_begin_offset);
+        assert_eq!(512 + 512 + 512, receive_result.packet_end_offset);
+        assert_eq!(false, stream.is_receive_readable());
+        assert!(stream.receive_read().is_none());
+
+        // Reset offset
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            512,
+            &[512],
+            PacketFlagType::ResetOffset as i32,
+            timepoint_start + 2,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(512, receive_result.packet_begin_offset);
+        assert_eq!(512 + 512, receive_result.packet_end_offset);
+
+        // Verify message
+        // receive first
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(512, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(
+            timepoint_start + 2,
+            read_result.first_timepoint_microseconds
+        );
+        assert_eq!(timepoint_start + 2, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(512..512 + 512));
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(512, stream.received_message_total_length);
+
+        // receive second
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert_eq!(1024, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(
+            timepoint_start + 1,
+            read_result.first_timepoint_microseconds
+        );
+        assert_eq!(timepoint_start + 1, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(1024..1024 + 512));
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+    }
 
     #[test]
-    fn receive_reset_offset_with_unreceived_message() {}
+    fn receive_reset_offset_with_unreceived_message() {
+        let mut stream = Stream::new(139);
+        assert_eq!(139, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(2048);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message =
+            generate_message_data(&message_data_buffer, 0, &[256], 0, timepoint_start, true);
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(0, receive_result.packet_begin_offset);
+        assert_eq!(256, receive_result.packet_end_offset);
+
+        assert_eq!(true, stream.is_receive_readable());
+
+        // Hole
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            512 + 512,
+            &[512],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(512 + 512, receive_result.packet_begin_offset);
+        assert_eq!(512 + 512 + 512, receive_result.packet_end_offset);
+
+        // Reset offset
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            512,
+            &[512],
+            PacketFlagType::ResetOffset as i32,
+            timepoint_start + 2,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(512, receive_result.packet_begin_offset);
+        assert_eq!(512 + 512, receive_result.packet_end_offset);
+
+        // Verify message
+        // receive first
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(!read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(0, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(timepoint_start, read_result.first_timepoint_microseconds);
+        assert_eq!(timepoint_start, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(..256));
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(1024, stream.received_message_total_length);
+
+        // receive second
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(512, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(
+            timepoint_start + 2,
+            read_result.first_timepoint_microseconds
+        );
+        assert_eq!(timepoint_start + 2, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(512..512 + 512));
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(512, stream.received_message_total_length);
+
+        // receive third
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert_eq!(1024, read_result.message.stream_offset);
+        assert_eq!(1, read_result.fragment_count);
+        assert_eq!(
+            timepoint_start + 1,
+            read_result.first_timepoint_microseconds
+        );
+        assert_eq!(timepoint_start + 1, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(1024..1024 + 512));
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+    }
 
     #[test]
-    fn receive_overlap() {}
+    fn receive_overlap() {
+        let mut stream = Stream::new(139);
+        assert_eq!(139, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(1024);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message =
+            generate_message_data(&message_data_buffer, 0, &[256], 0, timepoint_start, false);
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(0, receive_result.packet_begin_offset);
+        assert_eq!(256, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+
+        // tail
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128 + 256,
+            &[256],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128 + 256, receive_result.packet_begin_offset);
+        assert_eq!(128 + 256 + 256, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+
+        // Overlap
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128,
+            &[256],
+            0,
+            timepoint_start + 2,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128, receive_result.packet_begin_offset);
+        assert_eq!(128 + 256, receive_result.packet_end_offset);
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(128 + 512, stream.received_message_total_length);
+
+        // Verify message
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(!read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(0, read_result.message.stream_offset);
+        assert_eq!(3, read_result.fragment_count);
+        assert_eq!(timepoint_start, read_result.first_timepoint_microseconds);
+        assert_eq!(timepoint_start + 2, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(..128 + 512));
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+    }
 
     #[test]
-    fn receive_overwrite() {}
+    fn receive_overwrite_small_fragment() {
+        let mut stream = Stream::new(139);
+        assert_eq!(139, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(1024);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message =
+            generate_message_data(&message_data_buffer, 0, &[256], 0, timepoint_start, false);
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(0, receive_result.packet_begin_offset);
+        assert_eq!(256, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+
+        // tail
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128 + 256,
+            &[256],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128 + 256, receive_result.packet_begin_offset);
+        assert_eq!(128 + 256 + 256, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+
+        // Overwrite small
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128,
+            &[250],
+            0,
+            timepoint_start + 2,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128, receive_result.packet_begin_offset);
+        assert_eq!(128 + 250, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+
+        // Use large
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128,
+            &[256],
+            0,
+            timepoint_start + 3,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128, receive_result.packet_begin_offset);
+        assert_eq!(128 + 256, receive_result.packet_end_offset);
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(128 + 512, stream.received_message_total_length);
+
+        // Verify message
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(!read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(0, read_result.message.stream_offset);
+        assert_eq!(3, read_result.fragment_count);
+        assert_eq!(timepoint_start, read_result.first_timepoint_microseconds);
+        assert_eq!(timepoint_start + 3, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(..128 + 512));
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+    }
+
+    #[test]
+    fn receive_drop_small_fragment() {
+        let mut stream = Stream::new(139);
+        assert_eq!(139, stream.get_stream_id());
+        assert_eq!(false, stream.is_receive_readable());
+
+        let message_data_buffer = generate_message_data_buffer(1024);
+        let timepoint_start = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            0,
+            &[256 + 128],
+            0,
+            timepoint_start,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(0, receive_result.packet_begin_offset);
+        assert_eq!(256 + 128, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+
+        // drop small fragment
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128,
+            &[250],
+            0,
+            timepoint_start + 2,
+            false,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128, receive_result.packet_begin_offset);
+        // Push nothing so begin == end
+        assert_eq!(128, receive_result.packet_end_offset);
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+
+        // tail
+        let unpack_message = generate_message_data(
+            &message_data_buffer,
+            128 + 256,
+            &[256],
+            0,
+            timepoint_start + 1,
+            true,
+        );
+
+        let receive_result = stream.receive_push(unpack_message);
+        assert!(receive_result.is_ok());
+        let receive_result = receive_result.unwrap();
+
+        assert_eq!(128 + 256, receive_result.packet_begin_offset);
+        assert_eq!(128 + 256 + 256, receive_result.packet_end_offset);
+
+        assert_eq!(true, stream.is_receive_readable());
+        assert_eq!(128 + 512, stream.received_message_total_length);
+
+        // Verify message
+        let read_result = stream.receive_read();
+        assert!(read_result.is_some());
+        let read_result = read_result.unwrap();
+        assert!(!read_result.message.has_packet_flag_reset_offset());
+        assert_eq!(0, read_result.message.stream_offset);
+        assert_eq!(2, read_result.fragment_count);
+        assert_eq!(timepoint_start, read_result.first_timepoint_microseconds);
+        assert_eq!(timepoint_start + 1, read_result.last_timepoint_microseconds);
+        assert!(read_result.message.data == message_data_buffer.slice(..128 + 512));
+
+        assert_eq!(false, stream.is_receive_readable());
+        assert_eq!(0, stream.received_message_total_length);
+    }
 }
