@@ -17,14 +17,14 @@ use crate::libatbus_utility_dev::benchmark::BenchmarkProfiler;
 
 use ::libatbus_protocol::decoder::Decoder;
 use ::libatbus_protocol::{
-    AtbusPacketType, FrameMessageHead, SharedStreamConnectionContext, StreamConnectionContext,
-    StreamConnectionMessage, StreamPacketFragmentMessage,
+    AtbusPacketType, FrameMessageHead, StreamConnectionContext, StreamConnectionMessage,
+    StreamMessage, StreamPacketFragmentMessage,
 };
 
 use super::utility::generate_uuid;
 
-fn create_context(padding_size: usize) -> SharedStreamConnectionContext {
-    Rc::new(RefCell::new(StreamConnectionContext::new(
+fn create_context(padding_size: usize) -> StreamConnectionContext {
+    StreamConnectionContext::new(
         FrameMessageHead {
             source: format!("S:{}", generate_uuid()),
             destination: format!("C:{}", generate_uuid()),
@@ -36,7 +36,7 @@ fn create_context(padding_size: usize) -> SharedStreamConnectionContext {
         None,
         HashMap::new(),
         None,
-    )))
+    )
 }
 
 fn prepare_message_pool(messige_size: usize, count: usize) -> Vec<::prost::bytes::Bytes> {
@@ -53,7 +53,6 @@ fn prepare_message_pool(messige_size: usize, count: usize) -> Vec<::prost::bytes
 }
 
 fn insert_stream_messages(
-    ctx: &SharedStreamConnectionContext,
     start_offset: i64,
     message_pool: &Vec<::prost::bytes::Bytes>,
     pool_index: usize,
@@ -62,23 +61,26 @@ fn insert_stream_messages(
     simulator_stream_messages.insert(
         start_offset,
         Box::new(StreamConnectionMessage::new(
-            ctx.clone(),
-            AtbusPacketType::Data as i32,
-            start_offset,
-            message_pool[pool_index].clone(),
-            0,
-            None,
+            StreamMessage::new(
+                AtbusPacketType::Data as i32,
+                start_offset,
+                message_pool[pool_index].clone(),
+                0,
+                None,
+            )
+            .into(),
         )),
     );
 }
 
 fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: usize) {
     let count = 1024;
-    let ctx = create_context(32);
+    let mut ctx = create_context(32);
     let message_pool = prepare_message_pool(message_size, count);
     let mut message_index: usize = 0;
     let mut current_offset = 0;
-    let mut simulator_stream_messages: BTreeMap<i64, Box<StreamConnectionMessage>> = BTreeMap::new();
+    let mut simulator_stream_messages: BTreeMap<i64, Box<StreamConnectionMessage>> =
+        BTreeMap::new();
 
     let mut output_buffers = Vec::with_capacity(count);
     {
@@ -93,7 +95,6 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
         group.bench_function(format!("message size: {}", message_size).as_str(), |b| {
             b.iter(|| {
                 insert_stream_messages(
-                    &ctx,
                     current_offset,
                     &message_pool,
                     message_index,
@@ -102,6 +103,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
 
                 let mut output: Vec<u8> = Vec::with_capacity(message_size + 4096);
                 let pack_result = StreamConnectionMessage::pack(
+                    &mut ctx,
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
@@ -137,7 +139,6 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
         group.bench_function(format!("message size: {}", message_size).as_str(), |b| {
             b.iter(|| {
                 insert_stream_messages(
-                    &ctx,
                     current_offset,
                     &message_pool,
                     message_index,
@@ -146,6 +147,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
 
                 let mut output: Vec<u8> = Vec::with_capacity(message_size + 4096);
                 let pack_result = StreamConnectionMessage::pack(
+                    &mut ctx,
                     &simulator_stream_messages,
                     &mut output,
                     current_offset,
@@ -181,7 +183,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                 let result = StreamPacketFragmentMessage::unpack_from_buffer(
                     &decoder,
                     &output_buffers[output_index][..],
-                    Some(ctx.borrow().get_stream_id()),
+                    Some(ctx.get_stream_id()),
                 );
 
                 assert!(result.unwrap().1 >= message_size);
@@ -206,7 +208,7 @@ fn stream_message_benchmark(c: &mut Criterion, group_name: &str, message_size: u
                 let result = StreamPacketFragmentMessage::unpack_from_buffer(
                     &decoder,
                     &output_buffers[output_index][..],
-                    Some(ctx.borrow().get_stream_id()),
+                    Some(ctx.get_stream_id()),
                 );
 
                 assert!(result.unwrap().1 >= message_size);

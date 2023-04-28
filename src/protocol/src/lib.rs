@@ -49,6 +49,5 @@ pub type StreamPacketFragmentMessage = stream_message::StreamPacketFragmentMessa
 pub type StreamPacketInformation = stream_message::StreamPacketInformation;
 pub type SharedStreamPacketInformation = stream_message::SharedStreamPacketInformation;
 pub type StreamConnectionContext = stream_message::StreamConnectionContext;
-pub type SharedStreamConnectionContext = stream_message::SharedStreamConnectionContext;
 pub type StreamPacketFragmentPack = stream_message::StreamPacketFragmentPack;
 pub type StreamPacketFragmentUnpack = stream_message::StreamPacketFragmentUnpack;

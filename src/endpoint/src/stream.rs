@@ -7,8 +7,8 @@ use std::ops::Bound::Included;
 
 use libatbus_protocol::{
     error::ProtocolResult, BoxedStreamMessage, PacketFlagType, PacketFragmentFlagType,
-    SharedStreamConnectionContext, StreamConnectionMessage, StreamMessage,
-    StreamPacketFragmentMessage, StreamPacketFragmentUnpack,
+    StreamConnectionContext, StreamConnectionMessage, StreamMessage, StreamPacketFragmentMessage,
+    StreamPacketFragmentUnpack,
 };
 
 use crate::bytes;
@@ -28,7 +28,7 @@ pub struct StreamReadResult {
 pub type BoxedStreamReadResult = Box<StreamReadResult>;
 
 struct StreamConnection {
-    context: SharedStreamConnectionContext,
+    context: StreamConnectionContext,
     sent_offset: i64,
 }
 
@@ -37,7 +37,7 @@ pub struct Stream {
 
     // Send window, dynamic length
     send_messages: BTreeMap<i64, Box<StreamConnectionMessage>>,
-    send_acknowledge_offset: usize,
+    send_acknowledge_offset: i64,
 
     // Receive window, dynamic length
     received_fragments: BTreeMap<i64, StreamPacketFragmentMessage>,
@@ -89,15 +89,18 @@ impl Stream {
     pub fn send_message(&mut self, mut message: BoxedStreamMessage) -> ProtocolResult<()> {
         message.stream_offset = self.get_send_start_offset();
 
-        self.send_messages.insert(message.stream_offset, message);
+        self.send_messages.insert(
+            message.stream_offset,
+            StreamConnectionMessage::new(message).into(),
+        );
 
         // TODO Active all connections to send data.
         Ok(())
     }
 
-    pub fn send_acknowledge(&mut self, offset: i64) {
-        if offset > self.send_acknowledge_offset as i64 {
-            self.send_acknowledge_offset = offset as usize;
+    pub fn acknowledge_send_offset(&mut self, offset: i64) {
+        if offset > self.send_acknowledge_offset {
+            self.send_acknowledge_offset = offset;
         }
 
         loop {
@@ -106,7 +109,7 @@ impl Stream {
             }
 
             let first = self.send_messages.first_key_value().unwrap();
-            if self.send_acknowledge_offset < (*first.0 as usize) + first.1.as_ref().data.len() {
+            if self.send_acknowledge_offset < first.1.get_message_end_offset() {
                 break;
             }
 

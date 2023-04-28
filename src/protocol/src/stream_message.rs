@@ -1,12 +1,12 @@
 // Copyright 2023 atframework
 // Licensed under the MIT licenses.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::io;
 use std::ops::Bound::Included;
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::prost::Message;
 
@@ -36,8 +36,6 @@ pub struct StreamConnectionContext {
     packet_padding_bits: Option<usize>,
 }
 
-pub type SharedStreamConnectionContext = Rc<RefCell<StreamConnectionContext>>;
-
 pub struct StreamMessage {
     pub packet_type: i32,
     pub stream_offset: i64,
@@ -52,10 +50,10 @@ pub struct StreamMessage {
 
 pub struct StreamConnectionMessage {
     /// message
-    message: StreamMessage,
+    message: Box<StreamMessage>,
 
-    /// Connection context
-    connection_context: SharedStreamConnectionContext,
+    /// Used to retry send messages
+    pub create_timepoint_microseconds: i64,
 }
 
 pub struct StreamPacketInformation {
@@ -517,17 +515,13 @@ impl StreamMessage {
 }
 
 impl StreamConnectionMessage {
-    pub fn new(
-        connection_context: SharedStreamConnectionContext,
-        packet_type: i32,
-        stream_offset: i64,
-        data: ::prost::bytes::Bytes,
-        flags: i32,
-        close_reason: Option<Box<CloseReasonMessage>>,
-    ) -> Self {
+    pub fn new(message: Box<StreamMessage>) -> Self {
         StreamConnectionMessage {
-            message: StreamMessage::new(packet_type, stream_offset, data, flags, close_reason),
-            connection_context,
+            message,
+            create_timepoint_microseconds: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as i64,
         }
     }
 
@@ -536,8 +530,9 @@ impl StreamConnectionMessage {
         stream_offset: i64,
         timepoint_microseconds: i64,
         close_reason: &Option<Box<CloseReasonMessage>>,
+        connection_context: &StreamConnectionContext,
     ) -> (usize, usize) {
-        let header_len = self.connection_context.borrow().frame_message_predict_size
+        let header_len = connection_context.frame_message_predict_size
             + prost::length_delimiter_len(if stream_offset > 0 {
                 stream_offset as usize
             } else {
@@ -551,7 +546,7 @@ impl StreamConnectionMessage {
             })
             - 1;
 
-        let fragment_header_len = self.predict_fragment_size(&close_reason);
+        let fragment_header_len = self.predict_fragment_size(&connection_context, &close_reason);
 
         // Reserve tag and length varint for packet_data's content field.
         // Reserve varint for encoder's length header.
@@ -564,19 +559,20 @@ impl StreamConnectionMessage {
         )
     }
 
-    fn predict_fragment_size(&self, close_reason: &Option<Box<CloseReasonMessage>>) -> usize {
+    fn predict_fragment_size(
+        &self,
+        connection_context: &StreamConnectionContext,
+        close_reason: &Option<Box<CloseReasonMessage>>,
+    ) -> usize {
         let header_len;
         if let Some(cr) = close_reason {
             let encoded_len_of_cr = cr.encoded_len();
-            header_len = self.connection_context.borrow().fragment_message_predict_size
+            header_len = connection_context.fragment_message_predict_size
             // Key tag use last 3 bits of first byte as wire type.
             + prost::length_delimiter_len(7 * 8) // 7 is the tag of close_reason
             + prost::length_delimiter_len(encoded_len_of_cr);
         } else {
-            header_len = self
-                .connection_context
-                .borrow()
-                .fragment_message_predict_size;
+            header_len = connection_context.fragment_message_predict_size;
         }
 
         // Reserve tag and varint for fragment's data field.
@@ -627,6 +623,7 @@ impl StreamConnectionMessage {
     }
 
     pub fn pack<B>(
+        connection_context: &mut StreamConnectionContext,
         input: &BTreeMap<i64, Box<Self>>,
         output: B,
         start_stream_offset: i64,
@@ -686,6 +683,7 @@ impl StreamConnectionMessage {
         let select_range = input.range(start_element_offset..);
         for current_message in select_range.clone() {
             let res = current_message.1.pack_internal(
+                connection_context,
                 next_output,
                 &mut ret,
                 packet_size_limit,
@@ -699,7 +697,7 @@ impl StreamConnectionMessage {
             if ret.next_packet_fragment_offset < current_message.1.get_message_end_offset() {
                 next_output = current_message
                     .1
-                    .pack_finish(res.1, &mut ret, timepoint_microseconds)?
+                    .pack_finish(connection_context, res.1, &mut ret, timepoint_microseconds)?
                     .1;
                 break;
             }
@@ -710,26 +708,21 @@ impl StreamConnectionMessage {
         // Last message unfinished, finish the frame
         if let Some(last_message) = select_range.last() {
             if ret.next_packet_fragment_offset >= last_message.1.get_message_end_offset() {
-                let _ =
-                    last_message
-                        .1
-                        .pack_finish(next_output, &mut ret, timepoint_microseconds)?;
+                let _ = last_message.1.pack_finish(
+                    connection_context,
+                    next_output,
+                    &mut ret,
+                    timepoint_microseconds,
+                )?;
             }
         }
 
         Ok(ret)
     }
 
-    fn padding_len_ceil(&self, len: usize) -> usize {
-        self.connection_context.borrow().padding_len_ceil(len)
-    }
-
-    fn padding_len_floor(&self, len: usize) -> usize {
-        self.connection_context.borrow().padding_len_floor(len)
-    }
-
     fn pack_internal<B>(
         &self,
+        connection_context: &mut StreamConnectionContext,
         output: B,
         mut packer: &mut StreamPacketFragmentPack,
         packet_size_limit: usize,
@@ -751,9 +744,10 @@ impl StreamConnectionMessage {
             packer.next_packet_fragment_offset,
             timepoint_microseconds,
             &self.message.close_reason,
+            &connection_context,
         );
 
-        let padding_size = self.connection_context.borrow().get_padding_size();
+        let padding_size = connection_context.get_padding_size();
 
         if packet_size_limit < frame_head_reserve_size + fragment_head_reserve_size + padding_size {
             return Err(ProtocolError::IoError(io::Error::from(
@@ -761,7 +755,7 @@ impl StreamConnectionMessage {
             )));
         }
 
-        let fragment_max_data_len = self.padding_len_floor(
+        let fragment_max_data_len = connection_context.padding_len_floor(
             packet_size_limit - frame_head_reserve_size - fragment_head_reserve_size,
         );
         let mut consume_size = 0;
@@ -770,7 +764,12 @@ impl StreamConnectionMessage {
         let mut need_finish_previous_package = false;
         while packer.next_packet_fragment_offset < self.get_message_end_offset() {
             if need_finish_previous_package {
-                let res = self.pack_finish(next_output, &mut packer, timepoint_microseconds)?;
+                let res = self.pack_finish(
+                    connection_context,
+                    next_output,
+                    &mut packer,
+                    timepoint_microseconds,
+                )?;
                 consume_size += res.0;
                 next_output = res.1;
 
@@ -779,7 +778,8 @@ impl StreamConnectionMessage {
             }
 
             if let Some(upf) = packer.unfinished_packet_fragment_data.as_ref() {
-                let unfinished_fragment_len_with_headers = self.padding_len_ceil(upf.data.len())
+                let unfinished_fragment_len_with_headers = connection_context
+                    .padding_len_ceil(upf.data.len())
                     + frame_head_reserve_size
                     + fragment_head_reserve_size;
 
@@ -805,12 +805,12 @@ impl StreamConnectionMessage {
                     <= fragment_head_reserve_size
                         + frame_head_reserve_size
                         + padding_size
-                        + self.padding_len_ceil(upf.data.len())
+                        + connection_context.padding_len_ceil(upf.data.len())
                 {
                     return Ok((consume_size, next_output));
                 }
                 // After padding
-                let left_output_data_len = self.padding_len_floor(
+                let left_output_data_len = connection_context.padding_len_floor(
                     next_output.remaining_mut()
                         - fragment_head_reserve_size
                         - frame_head_reserve_size,
@@ -838,16 +838,13 @@ impl StreamConnectionMessage {
                     }
 
                     // Append to existed frame
-                    let _ = self
-                        .connection_context
-                        .borrow_mut()
-                        .append_fragment_message(
-                            packet_size_limit,
-                            &mut packer,
-                            &self,
-                            fragment_left_data_len as usize,
-                            force_packet_reset,
-                        )?;
+                    let _ = connection_context.append_fragment_message(
+                        packet_size_limit,
+                        &mut packer,
+                        &self,
+                        fragment_left_data_len as usize,
+                        force_packet_reset,
+                    )?;
                 } else {
                     // Finish previous
                     need_finish_previous_package = true;
@@ -861,16 +858,13 @@ impl StreamConnectionMessage {
                     }
 
                     // Append to existed frame
-                    let _ = self
-                        .connection_context
-                        .borrow_mut()
-                        .append_fragment_message(
-                            packet_size_limit,
-                            &mut packer,
-                            &self,
-                            current_fragment_available_data_len,
-                            force_packet_reset,
-                        )?;
+                    let _ = connection_context.append_fragment_message(
+                        packet_size_limit,
+                        &mut packer,
+                        &self,
+                        current_fragment_available_data_len,
+                        force_packet_reset,
+                    )?;
                 }
             } else {
                 // Full and exit
@@ -881,7 +875,7 @@ impl StreamConnectionMessage {
                 }
 
                 // After padding
-                let left_output_data_len = self.padding_len_floor(
+                let left_output_data_len = connection_context.padding_len_floor(
                     next_output.remaining_mut()
                         - fragment_head_reserve_size
                         - frame_head_reserve_size,
@@ -896,28 +890,22 @@ impl StreamConnectionMessage {
                 // Left data can be all filled into one frame
                 if current_fragment_available_data_len >= (fragment_left_data_len as usize) {
                     // Append to new frame
-                    let _ = self
-                        .connection_context
-                        .borrow_mut()
-                        .append_fragment_message(
-                            packet_size_limit,
-                            &mut packer,
-                            &self,
-                            fragment_left_data_len as usize,
-                            force_packet_reset,
-                        )?;
+                    let _ = connection_context.append_fragment_message(
+                        packet_size_limit,
+                        &mut packer,
+                        &self,
+                        fragment_left_data_len as usize,
+                        force_packet_reset,
+                    )?;
                 } else {
                     // Append to new frame
-                    let _ = self
-                        .connection_context
-                        .borrow_mut()
-                        .append_fragment_message(
-                            packet_size_limit,
-                            &mut packer,
-                            &self,
-                            current_fragment_available_data_len,
-                            force_packet_reset,
-                        )?;
+                    let _ = connection_context.append_fragment_message(
+                        packet_size_limit,
+                        &mut packer,
+                        &self,
+                        current_fragment_available_data_len,
+                        force_packet_reset,
+                    )?;
                     need_finish_previous_package = true;
                 }
             }
@@ -928,6 +916,7 @@ impl StreamConnectionMessage {
 
     fn pack_finish<B>(
         &self,
+        connection_context: &mut StreamConnectionContext,
         output: B,
         mut packer: &mut StreamPacketFragmentPack,
         timepoint_microseconds: i64,
@@ -935,30 +924,20 @@ impl StreamConnectionMessage {
     where
         B: bytes::BufMut,
     {
-        let (mut consume_size, next_output) =
-            if self.connection_context.borrow().frame_message_has_data {
-                let res = self
-                    .connection_context
-                    .borrow_mut()
-                    .pack_frame_message(output, &mut packer)?;
-                res
-            } else {
-                (0, output)
-            };
+        let (mut consume_size, next_output) = if connection_context.frame_message_has_data {
+            let res = connection_context.pack_frame_message(output, &mut packer)?;
+            res
+        } else {
+            (0, output)
+        };
 
         if !packer.unfinished_packet_fragment_data.is_some() {
             return Ok((consume_size, next_output));
         }
 
-        let _ = self
-            .connection_context
-            .borrow_mut()
-            .construct_frame_message(&mut packer, timepoint_microseconds)?;
+        let _ = connection_context.construct_frame_message(&mut packer, timepoint_microseconds)?;
 
-        let res = self
-            .connection_context
-            .borrow_mut()
-            .pack_frame_message(next_output, &mut packer)?;
+        let res = connection_context.pack_frame_message(next_output, &mut packer)?;
 
         consume_size += res.0;
         Ok((consume_size, res.1))
@@ -1152,6 +1131,8 @@ mod test {
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::vec::Vec;
 
+    type SharedStreamConnectionContext = Rc<RefCell<StreamConnectionContext>>;
+
     fn create_context(
         need_forward_for: bool,
         padding_size: usize,
@@ -1186,7 +1167,6 @@ mod test {
     }
 
     fn create_stream_messages(
-        ctx: &SharedStreamConnectionContext,
         start_offset: i64,
         message_sizes: &[i64],
     ) -> BTreeMap<i64, Box<StreamConnectionMessage>> {
@@ -1203,14 +1183,13 @@ mod test {
 
             ret.insert(
                 offset,
-                Box::new(StreamConnectionMessage::new(
-                    ctx.clone(),
+                Box::new(StreamConnectionMessage::new(Box::new(StreamMessage::new(
                     super::InternalMessageType::Data as i32,
                     offset,
                     data_buffer.into(),
                     0,
                     None,
-                )),
+                )))),
             );
 
             offset += *s;
@@ -1294,9 +1273,11 @@ mod test {
             .as_micros() as i64;
         let messages: BTreeMap<i64, Box<StreamConnectionMessage>> = BTreeMap::new();
 
+        let ctx = create_context(false, 32);
         let mut output: Vec<u8> = Vec::with_capacity(4096);
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -1322,14 +1303,14 @@ mod test {
             .as_micros() as i64;
         let data_length = 256;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
+        let messages = create_stream_messages(start_offset, &[data_length]);
 
         // predict length
         let (frame_head_reserve_size, fragment_head_reserve_size) = messages
             .first_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         let mut output_buffer = [0 as u8; 4096];
         let output_len =
@@ -1337,6 +1318,7 @@ mod test {
         let mut output: &mut [u8] = &mut output_buffer[0..output_len];
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -1447,7 +1429,7 @@ mod test {
             .as_micros() as i64;
         let data_length = 256;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
+        let messages = create_stream_messages(start_offset, &[data_length]);
 
         let mut output: Vec<u8> = Vec::with_capacity(4096);
 
@@ -1456,7 +1438,7 @@ mod test {
             .first_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         {
             let mut clone_framgment_message = ctx.borrow().fragment_message_template.clone();
@@ -1492,6 +1474,7 @@ mod test {
         }
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -1657,7 +1640,7 @@ mod test {
         let data_length = 256;
         let ctx = create_context(false, 32);
         let messages =
-            create_stream_messages(&ctx, start_offset, &[already_sent_data_length, data_length]);
+            create_stream_messages(start_offset, &[already_sent_data_length, data_length]);
 
         let mut output: Vec<u8> = Vec::with_capacity(4096);
 
@@ -1666,7 +1649,7 @@ mod test {
             .last_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         {
             let mut clone_framgment_message = ctx.borrow().fragment_message_template.clone();
@@ -1702,6 +1685,7 @@ mod test {
         }
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset + already_sent_data_length,
@@ -1864,7 +1848,7 @@ mod test {
             .as_micros() as i64;
         let data_length = 256;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length]);
+        let messages = create_stream_messages(start_offset, &[data_length]);
 
         let mut output: Vec<u8> = Vec::with_capacity(4096);
 
@@ -1873,12 +1857,13 @@ mod test {
             .first_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         let packet_size_limit =
             frame_head_reserve_size + fragment_head_reserve_size + data_length as usize - 20;
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -2131,7 +2116,7 @@ mod test {
         let data_length1 = 153;
         let data_length2 = 256;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+        let messages = create_stream_messages(start_offset, &[data_length1, data_length2]);
 
         let mut output: Vec<u8> = Vec::with_capacity(4096);
 
@@ -2140,9 +2125,10 @@ mod test {
             .last_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -2322,8 +2308,7 @@ mod test {
         let data_length1 = 153;
         let data_length2 = 256;
         let ctx = create_context(false, 32);
-        let mut messages =
-            create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+        let mut messages = create_stream_messages(start_offset, &[data_length1, data_length2]);
         messages.last_entry().unwrap().get_mut().message.flags = PacketFlagType::ResetOffset as i32;
         assert!(messages
             .last_entry()
@@ -2339,9 +2324,10 @@ mod test {
             .last_key_value()
             .unwrap()
             .1
-            .predict_frame_size(start_offset, timepoint, &None);
+            .predict_frame_size(start_offset, timepoint, &None, &ctx.borrow());
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -2528,11 +2514,12 @@ mod test {
         let data_length1 = 2048;
         let data_length2 = 1987;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+        let messages = create_stream_messages(start_offset, &[data_length1, data_length2]);
 
         let mut output: Vec<u8> = Vec::with_capacity(8192);
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output,
             start_offset,
@@ -2714,11 +2701,12 @@ mod test {
         let data_length1 = 2048;
         let data_length2 = 1987;
         let ctx = create_context(false, 32);
-        let messages = create_stream_messages(&ctx, start_offset, &[data_length1, data_length2]);
+        let messages = create_stream_messages(start_offset, &[data_length1, data_length2]);
 
         let mut output: [u8; 3072] = [0 as u8; 3072];
 
         let pack_result = StreamConnectionMessage::pack(
+            &mut ctx.borrow_mut(),
             &messages,
             &mut output[..],
             start_offset,
